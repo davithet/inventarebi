@@ -22,6 +22,12 @@ table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:10px;bor
 @media(max-width:900px){.grid,.contact-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.grid,.contact-grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
 
 .messenger-shell{display:grid;grid-template-columns:300px 1fr;gap:14px;min-height:560px}.messenger-users{background:#fff;border-radius:12px;box-shadow:0 2px 10px #00000012;overflow:auto}.messenger-user{padding:12px 14px;border:0;border-bottom:1px solid #e5e7eb;background:#fff;width:100%;text-align:left;cursor:pointer}.messenger-user:hover,.messenger-user.active{background:#eff6ff}.messenger-user b{display:block}.messenger-user small{color:#64748b}.chat-panel{background:#fff;border-radius:12px;box-shadow:0 2px 10px #00000012;display:flex;flex-direction:column;min-width:0}.chat-head{padding:14px 16px;border-bottom:1px solid #e5e7eb;font-weight:700}.chat-messages{flex:1;min-height:390px;max-height:58vh;overflow:auto;padding:16px;background:#f8fafc}.msg{display:flex;margin:7px 0}.msg.mine{justify-content:flex-end}.bubble{max-width:75%;padding:9px 12px;border-radius:12px;background:#fff;border:1px solid #e2e8f0}.mine .bubble{background:#dbeafe;border-color:#bfdbfe}.bubble .meta{font-size:11px;color:#64748b;margin-top:5px;display:flex;gap:8px;align-items:center}.bubble button{border:0;background:transparent;color:#dc2626;cursor:pointer;padding:0}.chat-compose{display:flex;gap:8px;padding:12px;border-top:1px solid #e5e7eb}.chat-compose textarea{min-height:48px;max-height:120px;resize:none}.online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:6px}.offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#94a3b8;margin-right:6px}.empty-chat{padding:50px 20px;text-align:center;color:#64748b}.unread{float:right;background:#2563eb;color:#fff;border-radius:12px;padding:2px 7px;font-size:11px}@media(max-width:800px){.messenger-shell{grid-template-columns:1fr}.messenger-users{max-height:230px}.chat-messages{max-height:50vh}.bubble{max-width:88%}}
+
+.excel-drop{border:2px dashed #93c5fd;border-radius:12px;padding:24px;text-align:center;background:#f8fbff;margin-bottom:16px}
+.excel-drop input{max-width:520px;margin:10px auto}.excel-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
+.excel-stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px}.excel-stat b{font-size:20px;display:block}
+.excel-owner{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin:10px 0}
+@media(max-width:900px){.excel-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.excel-summary{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -37,16 +43,18 @@ table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:10px;bor
 const SUPABASE_URL="https://mryasmrafihpyabiouci.supabase.co";
 const SUPABASE_ANON_KEY="sb_publishable_gd0jp_NQGt4r_1ZQdRwaSw_HgStFsrK";
 let sb=null,currentType="persons",editingId=null,currentPerson=null;
+const fastCache={persons:null,personsAt:0,counts:null,countsAt:0};
+function clearFastCache(){fastCache.persons=null;fastCache.personsAt=0;fastCache.counts=null;fastCache.countsAt=0}
 let currentAuthUser=null, messengerChannel=null, messengerSelectedUser=null, messengerProfiles=[];
 
 /* OFFLINE-FIRST ENGINE */
 const OFF_DB="inventory_offline_v2";
-const OFF_VER=1;
+const OFF_VER=2;
 const OFF_TABLES="tables";
 const OFF_QUEUE="queue";
 let offlineMode=false, syncBusy=false, db=null;
 
-function idbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(OFF_DB,OFF_VER);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(OFF_TABLES))d.createObjectStore(OFF_TABLES);if(!d.objectStoreNames.contains(OFF_QUEUE))d.createObjectStore(OFF_QUEUE,{keyPath:"qid",autoIncrement:true})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function idbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(OFF_DB,OFF_VER);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(OFF_TABLES))d.createObjectStore(OFF_TABLES);if(!d.objectStoreNames.contains(OFF_QUEUE))d.createObjectStore(OFF_QUEUE,{keyPath:"qid",autoIncrement:true});if(!d.objectStoreNames.contains("excel_import"))d.createObjectStore("excel_import")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 async function idbSetTable(name,rows){const d=await idbOpen();return new Promise((res,rej)=>{const tx=d.transaction(OFF_TABLES,"readwrite");tx.objectStore(OFF_TABLES).put(rows,name);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 async function idbGetTable(name){const d=await idbOpen();return new Promise((res,rej)=>{const tx=d.transaction(OFF_TABLES,"readonly");const r=tx.objectStore(OFF_TABLES).get(name);r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}
 async function idbQueue(item){const d=await idbOpen();return new Promise((res,rej)=>{const tx=d.transaction(OFF_QUEUE,"readwrite");tx.objectStore(OFF_QUEUE).add({...item,queued_at:new Date().toISOString()});tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
@@ -112,13 +120,226 @@ function showLogin(){loginView.classList.remove('hidden');appView.classList.add(
 function showApp(s){currentAuthUser=s.user||null;loginView.classList.add('hidden');appView.classList.remove('hidden');userInfo.textContent='მომხმარებელი: '+(s.user.email||'');buildTabs();loadRecords()}
 async function login(){const email=loginEmail.value.trim(),password=loginPassword.value;loginMsg.textContent='';if(offlineMode||!navigator.onLine||!sb){const saved=localStorage.getItem("inventory_offline_email");if(saved&&saved.toLowerCase()===email.toLowerCase()){await showApp({user:{email}});setStatus("🔴 OFFLINE • მონაცემები ამ კომპიუტერშია შენახული")}else loginMsg.textContent="Offline რეჟიმში ხელმისაწვდომია მხოლოდ ადრე ავტორიზებული მომხმარებელი.";return}const {error}=await sb.auth.signInWithPassword({email,password});if(error)loginMsg.textContent='შესვლის შეცდომა: '+error.message}
 async function logout(){localStorage.removeItem("inventory_offline_email");if(sb)await sb.auth.signOut();else showLogin()}
-function buildTabs(){const t=tabs;t.innerHTML='';Object.entries(configs).forEach(([k,c])=>{const b=document.createElement('button');b.textContent=c.title;b.onclick=()=>{currentType=k;document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');loadRecords()};t.appendChild(b)});['🔄 პასუხისმგებლობის ისტორია','🔎 მთელ სისტემაში ძებნა','💬 მესენჯერი'].forEach((txt,i)=>{const b=document.createElement('button');b.textContent=txt;b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));if(i===0)historyView();else if(i===1)globalSearchView();else messengerView()};t.appendChild(b)});t.querySelector('button').classList.add('active')}
+function buildTabs(){const t=tabs;t.innerHTML='';Object.entries(configs).forEach(([k,c])=>{const b=document.createElement('button');b.textContent=c.title;b.onclick=()=>{currentType=k;document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');loadRecords()};t.appendChild(b)});['📊 კონტროლის ცენტრი','⚠️ პრობლემების ცენტრი','👤 პიროვნების ძებნა','🔄 პასუხისმგებლობის ისტორია','🔎 მთელ სისტემაში ძებნა','📊 Excel მონაცემები','💬 მესენჯერი'].forEach((txt,i)=>{const b=document.createElement('button');b.textContent=txt;b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(i===0)dashboardView();else if(i===1)problemsView();else if(i===2)personSearchView();else if(i===3)historyView();else if(i===4)globalSearchView();else if(i===5)excelView();else messengerView()};t.appendChild(b)});t.querySelector('button').classList.add('active')}
+
+async function dashboardView(){
+  section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">📊 კონტროლის ცენტრი</h2><button class="btn btn-primary" onclick="dashboardView()">🔄 განახლება</button></div><div id="dashboardBox"><div class="status">🔄 მონაცემები ითვლება...</div></div></div>`;
+  try{
+    const [pr,...irs]=await Promise.all([db.from('persons').select('id,serial_no,personal_id,first_name,last_name'),...inventoryTables.map(x=>db.from(x.table).select('id,inventory_no,person_id,active'))]);
+    if(pr.error)throw pr.error;
+    const people=pr.data||[]; let total=0,assigned=0,free=0,inactive=0; const nums=new Map(), duplicate=[];
+    inventoryTables.forEach((cfg,i)=>{const rows=irs[i]?.data||[]; total+=rows.length; rows.forEach(r=>{if(r.person_id)assigned++;else free++;if(r.active===false)inactive++;const n=String(r.inventory_no||'').trim();if(n){if(nums.has(n))duplicate.push({n,a:nums.get(n),b:cfg.title});else nums.set(n,cfg.title)}})});
+    const saved=await loadExcelImport(); const ep=saved?.people||[]; const er=saved?.rows||[];
+    const excelNs=new Set(ep.map(x=>excelSerialKey(x.serial)).filter(Boolean)); const programNs=new Set(people.map(x=>excelSerialKey(x.serial_no)).filter(Boolean));
+    let excelOnly=0; excelNs.forEach(n=>{if(!programNs.has(n))excelOnly++});
+    const idWarnings=[]; ep.forEach(x=>{const n=excelSerialKey(x.serial);if(!n)return;const dbp=people.find(p=>excelSerialKey(p.serial_no)===n);const eid=String(x.personalId||'').trim(), did=String(dbp?.personal_id||'').trim();if(dbp&&eid&&did&&eid!==did)idWarnings.push(n)});
+    document.getElementById('dashboardBox').innerHTML=`<div class="excel-summary"><div class="excel-stat"><b>${people.length}</b> პიროვნება</div><div class="excel-stat"><b>${total}</b> ინვენტარი</div><div class="excel-stat"><b>${assigned}</b> გაცემული</div><div class="excel-stat"><b>${free}</b> თავისუფალი</div><div class="excel-stat"><b>${inactive}</b> ჩამოწერილი/უმოქმედო</div><div class="excel-stat"><b>${excelOnly}</b> Excel-ში ახალი N</div></div>
+      <div class="grid" style="margin-top:16px"><div class="card" style="margin:0"><h3>⚠️ კონტროლი</h3><p>🔢 დუბლირებული ინვენტარის ნომრები: <b>${duplicate.length}</b></p><p>🪪 განსხვავებული პირადი ID (ორივე შევსებულია): <b>${idWarnings.length}</b></p><p>📊 Excel-ში არსებული, პროგრამაში არმყოფი N: <b>${excelOnly}</b></p></div><div class="card" style="margin:0"><h3>🔑 იდენტიფიკაციის წესი</h3><p><b>N</b> არის მთავარი იდენტიფიკატორი.</p><p>Excel-ის ცარიელი პირადი ID შეცდომად არ ითვლება.</p><p>თუ ორივე ID არსებობს და განსხვავდება, მიიღება მხოლოდ ⚠️ გაფრთხილება.</p></div></div>
+      ${duplicate.length?`<div class="inv-status inv-used" style="margin-top:14px"><b>🔴 დუბლირებული ინვენტარი</b><p>${duplicate.slice(0,30).map(d=>`№ <b>${esc(d.n)}</b> — ${esc(d.a)} / ${esc(d.b)}`).join('<br>')}</p></div>`:''}`;
+  }catch(e){document.getElementById('dashboardBox').innerHTML='<div class="inv-status inv-none">⚠️ '+esc(e.message||e)+'</div>'}
+}
 async function loadRecords(){if(currentType==='messenger'){await messengerView();return}if(currentType==='persons'){await personsView();return}const c=configs[currentType];section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">${c.title}</h2><input class="search" id="searchInput" placeholder="🔎 ძებნა..." oninput="filterTable()"><button class="btn btn-primary" onclick="openAdd()">➕ დამატება</button></div><div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>`;thead.innerHTML='<tr>'+c.fields.map(f=>`<th>${f[1]}</th>`).join('')+'<th>მოქმედება</th></tr>';setStatus('მონაცემები იტვირთება...');const {data,error}=await db.from(c.table).select('*').order('created_at',{ascending:false});if(error){setStatus('შეცდომა: '+error.message,true);return}section.dataset.rows=JSON.stringify(data||[]);renderRows(data||[]);setStatus('დაკავშირებულია • '+(data?.length||0)+' ჩანაწერი')}
 function renderRows(rows){const c=configs[currentType];tbody.innerHTML=rows.map(r=>`<tr data-search="${esc(Object.values(r).join(' ').toLowerCase())}">${c.fields.map(f=>`<td>${f[0]==='active'?(r.active===false?'<b style="color:#dc2626">🔴 უმოქმედო / შენახულია</b>':'<b style="color:#15803d">🟢 მოქმედებაშია</b>'):esc(r[f[0]]??'')}</td>`).join('')}<td class="actions"><button class="btn-secondary" onclick="editRecord('${r.id}')">✏️</button><button class="btn-danger" onclick="deleteRecord('${r.id}')">🗑️</button></td></tr>`).join('')}
 function filterTable(){const q=(document.getElementById('searchInput')?.value||'').toLowerCase();document.querySelectorAll('#tbody tr').forEach(r=>r.style.display=r.dataset.search.includes(q)?'':'none')}
 
-async function personsView(){section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">👤 პიროვნებები</h2><input class="search" id="personSearch" placeholder="🔎 სახელი, გვარი, ID, კაბინეტი..." oninput="filterPersons()"><button class="btn btn-primary" onclick="openPersonForm()">➕ ახალი პიროვნების დამატება</button></div><div class="table-wrap"><table><thead><tr><th>რიგითი №</th><th>სახელი / გვარი</th><th>პირადი ID</th><th>თანამდებობა</th><th>კონტაქტები</th><th>კაბინეტი</th><th>სართული</th><th>ინვენტარი</th><th>მოქმედება</th></tr></thead><tbody id="personBody"></tbody></table></div></div>`;setStatus('პიროვნებები იტვირთება...');const {data,error}=await db.from('persons').select('*').order('created_at',{ascending:false});if(error){setStatus('შეცდომა: '+error.message,true);return}window.personRows=data||[];await renderPersons();setStatus('დაკავშირებულია • '+window.personRows.length+' პიროვნება')}
-async function renderPersons(){const b=document.getElementById('personBody');const counts={};await Promise.all(inventoryTables.map(async x=>{const {data}=await db.from(x.table).select('person_id').not('person_id','is',null);for(const r of (data||[])){if(r.person_id)counts[r.person_id]=(counts[r.person_id]||0)+1}}));b.innerHTML=window.personRows.map(p=>{const cs=parseContacts(p.mobile);return `<tr data-search="${esc([p.serial_no,p.first_name,p.last_name,p.personal_id,p.position,p.room_no,p.floor,p.mobile].join(' ').toLowerCase())}"><td><b>${esc(p.serial_no??'')}</b></td><td><b class="${p.employed===false?'person-left':''}">${esc(p.first_name)} ${esc(p.last_name)}</b>${p.employed===false?'<br><span style="color:#dc2626;font-weight:700">🔴 აღარ მუშაობს</span>':''}<br><span class="badge">ID: ${esc(p.id)}</span></td><td>${esc(p.personal_id)}</td><td>${esc(p.position)}</td><td>${cs.map(esc).join('<br>')}</td><td>${esc(p.room_no)}</td><td>${esc(p.floor)}</td><td><b>${counts[p.id]||0}</b> ობიექტი</td><td class="actions"><button class="btn-success" onclick="personInventory('${p.id}')">📦 ინვენტარი</button><button class="btn-secondary" onclick="editPerson('${p.id}')">✏️</button><button class="btn-danger" onclick="deletePerson('${p.id}')">🗑️</button><button class="btn-warning" onclick="printPerson('${p.id}')">🖨️</button><button class="btn-primary" onclick="printAct('${p.id}')">📄 აქტი</button></td></tr>`}).join('')}
+async function focusProblemPerson(serial){
+  personSearchView();
+  const input=document.getElementById('personLookup');
+  if(input){input.value=serial??'';await runPersonLookup();}
+}
+async function focusExcelPerson(serial){
+  excelView();
+  setTimeout(()=>{const input=document.getElementById('excelSearch');if(input){input.value=serial??'';runExcelSearch();}},80);
+}
+async function focusProblemInventory(table,id,invNo){
+  const cfg=inventoryTables.find(x=>x.table===table);
+  if(!cfg)return;
+  currentType=cfg.key;
+  await loadRecords();
+  const input=document.getElementById('searchInput');
+  if(input){input.value=invNo||id||'';filterTable();}
+  const row=[...document.querySelectorAll('#tbody tr')].find(r=>r.style.display!=='none');
+  if(row){row.scrollIntoView({behavior:'smooth',block:'center'});row.style.outline='3px solid #f59e0b';setTimeout(()=>row.style.outline='',3000);}
+}
+
+async function repairProblem(type,table,id,personId,invNo){
+  try{
+    if(type==='unassign_unknown'){
+      const ok=confirm(`ინვენტარი № ${invNo||'—'} მიბმულია ისეთ პიროვნებაზე, რომელიც პროგრამაში აღარ მოიძებნა.\n\nგსურთ პასუხისმგებლობიდან მოხსნა და ინვენტარის თავისუფლად დატოვება?`);
+      if(!ok)return;
+      const q=await db.from(table).select('person_id,inventory_no').eq('id',id).single();
+      if(q.error)throw q.error;
+      const oldPid=q.data?.person_id||personId||null;
+      const u=await db.from(table).update({person_id:null}).eq('id',id);
+      if(u.error)throw u.error;
+      await logHistory(q.data?.inventory_no||invNo,table,oldPid,null,'პრობლემების ცენტრიდან: უცნობ პიროვნებაზე მიბმული ინვენტარი გათავისუფლდა');
+      alert('✅ ინვენტარი გათავისუფლდა.');
+      await problemsView();
+      return;
+    }
+    if(type==='unassign_inactive'){
+      const ok=confirm(`ინვენტარი № ${invNo||'—'} უმოქმედო/შენახულია, მაგრამ კვლავ პიროვნებაზეა მიბმული.\n\nგსურთ პასუხისმგებლობიდან მოხსნა?`);
+      if(!ok)return;
+      const q=await db.from(table).select('person_id,inventory_no').eq('id',id).single();
+      if(q.error)throw q.error;
+      const u=await db.from(table).update({person_id:null}).eq('id',id);
+      if(u.error)throw u.error;
+      await logHistory(q.data?.inventory_no||invNo,table,q.data?.person_id||null,null,'პრობლემების ცენტრიდან: უმოქმედო ინვენტარი მოიხსნა პასუხისმგებლობიდან');
+      alert('✅ პასუხისმგებლობა მოიხსნა.');
+      await problemsView();
+      return;
+    }
+    if(type==='open_excel_import'){
+      excelView();
+      setTimeout(()=>{const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('იმპორტის')||b.textContent.includes('იმპორტ'));if(btn)btn.scrollIntoView({behavior:'smooth',block:'center'});},80);
+      return;
+    }
+    if(type==='edit_person'){
+      const {data,error}=await db.from('persons').select('*').eq('id',personId).single();
+      if(error)throw error;
+      openPersonForm(data);
+      return;
+    }
+    alert('ℹ️ ამ პრობლემას ავტომატური ცვლილება არ აქვს. გახსენი ჩანაწერი და გადაამოწმე ხელით.');
+  }catch(e){alert('გამოსწორების შეცდომა: '+(e.message||e));}
+}
+
+async function problemsView(){
+  section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">⚠️ პრობლემების ცენტრი</h2><button class="btn btn-primary" onclick="problemsView()">🔄 ხელახლა შემოწმება</button></div><p class="hint">პროგრამა ამოწმებს მონაცემებს და აჩვენებს პრობლემებს. სადაც უსაფრთხოდ შეიძლება, გაქვს პირდაპირი <b>🔧 გამოსწორება</b>; სხვა შემთხვევებში მხოლოდ შემოწმების/რედაქტირების გზა ჩანს.</p><div id="problemsBox"><div class="status">🔄 ვამოწმებ მონაცემებს...</div></div></div>`;
+  try{
+    const [pr,...irs]=await Promise.all([db.from('persons').select('*'),...inventoryTables.map(x=>db.from(x.table).select('*'))]);
+    if(pr.error)throw pr.error;
+    const people=pr.data||[], issues=[];
+    const add=(severity,title,detail,action,repair=null)=>issues.push({severity,title,detail,action,repair});
+    const nkey=v=>String(v??'').trim();
+    const escJs=v=>String(v??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const pByN=new Map();
+    people.forEach(p=>{const n=nkey(p.serial_no);if(n){if(pByN.has(n))add('high','ერთსა და იმავე N-ზე რამდენიმე პიროვნებაა',`N ${n} — ${pByN.get(n).first_name||''} ${pByN.get(n).last_name||''} და ${p.first_name||''} ${p.last_name||''}`,`focusProblemPerson('${escJs(n)}')`);else pByN.set(n,p)}});
+    const invSeen=new Map(); const personIds=new Set(people.map(p=>p.id));
+    inventoryTables.forEach((cfg,i)=>{(irs[i]?.data||[]).forEach(r=>{
+      const no=nkey(r.inventory_no);
+      if(!no)add('medium','საინვენტარო ნომერი ცარიელია',`${cfg.type} • ჩანაწერი ${r.id}`,`focusProblemInventory('${escJs(cfg.table)}','${escJs(r.id)}','')`,'');
+      else if(invSeen.has(no)){const x=invSeen.get(no);add('high','დუბლირებული საინვენტარო ნომერი',`№ ${no} — ${x.type} და ${cfg.type}`,`focusProblemInventory('${escJs(cfg.table)}','${escJs(r.id)}','${escJs(no)}')`,'');}
+      else invSeen.set(no,{type:cfg.type,table:cfg.table,id:r.id});
+      if(r.person_id&&!personIds.has(r.person_id))add('high','ინვენტარი მიბმულია უცნობ პიროვნებაზე',`${cfg.type} • № ${no||'—'}`,`focusProblemInventory('${escJs(cfg.table)}','${escJs(r.id)}','${escJs(no)}')`,`repairProblem('unassign_unknown','${escJs(cfg.table)}','${escJs(r.id)}','${escJs(r.person_id)}','${escJs(no)}')`);
+      if(r.active===false&&r.person_id){const pp=people.find(x=>x.id===r.person_id);add('medium','უმოქმედო ინვენტარი კვლავ პიროვნებაზეა მიბმული',`${cfg.type} • № ${no||'—'} • ${pp?(pp.first_name+' '+pp.last_name):'უცნობი პიროვნება'}`,pp?`focusProblemPerson('${escJs(pp.serial_no||'')}')`:`focusProblemInventory('${escJs(cfg.table)}','${escJs(r.id)}','${escJs(no)}')`,`repairProblem('unassign_inactive','${escJs(cfg.table)}','${escJs(r.id)}','${escJs(r.person_id)}','${escJs(no)}')`)}
+    })});
+    const saved=await loadExcelImport(); const ep=saved?.people||[], er=saved?.rows||[];
+    ep.forEach(x=>{const n=nkey(x.serial);if(!n)return;const p=pByN.get(n);if(!p)add('medium','Excel-ში არის პიროვნება, რომელიც პროგრამაში არ არის',`N ${n} • ${x.firstName||''} ${x.lastName||''}`,`focusExcelPerson('${escJs(n)}')`,`repairProblem('open_excel_import','','','','')`);else{const eid=nkey(x.personalId),did=nkey(p.personal_id);if(eid&&did&&eid!==did)add('medium','პირადი ID განსხვავებულია',`N ${n} • Excel: ${eid} • პროგრამა: ${did}`,`focusProblemPerson('${escJs(n)}')`,`repairProblem('edit_person','','','${escJs(p.id)}','')`);}});
+    const excelNCount=new Map(); ep.forEach(x=>{const n=nkey(x.serial);if(n)excelNCount.set(n,(excelNCount.get(n)||0)+1)}); excelNCount.forEach((c,n)=>{if(c>1)add('high','Excel-ში N მეორდება',`N ${n} — ${c} ჩანაწერი`,`focusExcelPerson('${escJs(n)}')`,'');
+    });
+    er.forEach(r=>{if(r.inventoryNo){const matches=invSeen.get(nkey(r.inventoryNo));if(!matches)add('medium','Excel-ის ინვენტარი პროგრამაში არ მოიძებნა',`№ ${r.inventoryNo} • ${r.personName||'პიროვნება უცნობია'} • ${r.sheet||''} / ${r.row||''}`,`globalSearchView();setTimeout(()=>{const el=document.getElementById('globalInv');if(el){el.value='${escJs(r.inventoryNo)}';runGlobalSearch();}},80)`,`repairProblem('open_excel_import','','','','')`);}});
+    const box=document.getElementById('problemsBox');
+    if(!issues.length){box.innerHTML='<div class="status" style="color:#15803d;font-weight:700;font-size:18px">✅ პრობლემა ვერ მოიძებნა — მონაცემები წესრიგშია.</div>';return}
+    const order={high:0,medium:1,low:2}; issues.sort((a,b)=>order[a.severity]-order[b.severity]);
+    const counts=issues.reduce((a,x)=>(a[x.severity]=(a[x.severity]||0)+1,a),{});
+    box.innerHTML=`<div class="excel-summary"><div class="excel-stat"><b>${issues.length}</b> პრობლემა</div><div class="excel-stat"><b>${counts.high||0}</b> 🔴 მაღალი</div><div class="excel-stat"><b>${counts.medium||0}</b> 🟠 საშუალო</div></div><div style="display:grid;gap:10px;margin-top:14px">${issues.map(x=>{const icon=x.severity==='high'?'🔴':x.severity==='medium'?'🟠':'🟡';const cls=x.severity==='high'?'border-left:5px solid #dc2626':x.severity==='medium'?'border-left:5px solid #f59e0b':'border-left:5px solid #eab308';return `<div style="background:#fff;border:1px solid #e5e7eb;${cls};border-radius:10px;padding:13px"><div><b>${icon} ${esc(x.title)}</b></div><div style="margin-top:5px;color:#475569">${esc(x.detail)}</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-secondary" onclick="${x.action}">➡️ შემოწმება</button>${x.repair?`<button type="button" class="btn btn-warning" onclick="${x.repair}">🔧 გამოსწორება</button>`:''}</div></div>`}).join('')}</div>`;
+  }catch(e){document.getElementById('problemsBox').innerHTML='<div class="status" style="color:#dc2626">შეცდომა: '+esc(e.message||e)+'</div>';}
+}
+
+async function personSearchView(){
+  section.innerHTML=`<div class="card">
+    <div class="toolbar"><h2 style="margin-right:auto">👤 პიროვნების სწრაფი ძებნა</h2>
+      <input id="personLookup" class="search" style="min-width:320px" placeholder="N / სახელი / გვარი / პირადი ID" onkeydown="if(event.key==='Enter')runPersonLookup()">
+      <button class="btn btn-primary" onclick="runPersonLookup()">🔎 ძებნა</button>
+    </div>
+    <div class="hint">შეიყვანე <b>რიგითი უნიკალური № (N)</b>, სახელი/გვარი ან პირადი ID. შედეგში გამოჩნდება პროგრამის ინვენტარი, Excel-ის მონაცემები და პასუხისმგებლობის ისტორია.</div>
+    <div id="personLookupResults" style="margin-top:16px"></div>
+  </div>`;
+  document.getElementById('personLookup').focus();
+}
+
+async function runPersonLookup(){
+  const box=document.getElementById('personLookupResults');
+  const q=String(document.getElementById('personLookup')?.value||'').trim().toLowerCase();
+  if(!q){box.innerHTML='<div class="status">შეიყვანე N, სახელი/გვარი ან პირადი ID.</div>';return}
+  box.innerHTML='<div class="status">🔄 პიროვნებას და მის ინვენტარს ვეძებ...</div>';
+  let people=fastCache.persons;
+  if(!people || Date.now()-fastCache.personsAt>60000){
+    const q=await db.from('persons').select('id,serial_no,first_name,last_name,personal_id,position,room_no,floor,mobile,work_phone,employed').order('serial_no',{ascending:true});
+    if(q.error){box.innerHTML='<div class="status" style="color:#dc2626">შეცდომა: '+esc(q.error.message)+'</div>';return}
+    people=q.data||[]; fastCache.persons=people; fastCache.personsAt=Date.now();
+  }
+  const norm=v=>String(v??'').trim().toLowerCase();
+  const matches=(people||[]).filter(p=>[p.serial_no,p.first_name,p.last_name,p.personal_id,p.position,p.room_no,p.floor,p.mobile,p.work_phone].some(v=>norm(v).includes(q)));
+  if(!matches.length){box.innerHTML='<div class="inv-status inv-none">⚪ ასეთი პიროვნება პროგრამაში ვერ მოიძებნა.</div>';return}
+  box.innerHTML=matches.map(p=>`<div class="card" style="margin-bottom:14px;border:1px solid #dbeafe">
+    <div class="toolbar"><div style="margin-right:auto"><span class="badge">N: ${esc(p.serial_no??'—')}</span> <b style="font-size:18px">${esc(p.first_name||'')} ${esc(p.last_name||'')}</b>${p.employed===false?' <span style="color:#dc2626;font-weight:700">🔴 აღარ მუშაობს</span>':''}</div><button class="btn btn-success" onclick="openPersonLookupDetails('${p.id}')">📋 სრული ინფორმაცია</button></div>
+    <div class="grid" style="margin-top:10px"><div><b>პირადი ID:</b> ${esc(p.personal_id||'—')}</div><div><b>თანამდებობა:</b> ${esc(p.position||'—')}</div><div><b>კაბინეტი:</b> ${esc(p.room_no||'—')}</div><div><b>სართული:</b> ${esc(p.floor||'—')}</div></div>
+  </div>`).join('');
+}
+
+async function openPersonLookupDetails(pid){
+  const {data:p,error}=await db.from('persons').select('*').eq('id',pid).single();
+  if(error||!p){alert(error?.message||'პიროვნება ვერ მოიძებნა.');return}
+  const [inv,saved,hr]=await Promise.all([
+    getPersonAll(pid),
+    loadExcelImport(),
+    db.from('responsibility_history').select('*').eq('person_id',pid).order('created_at',{ascending:false})
+  ]);
+  const excelRows=(saved?.rows||excelImportedRows||[]).filter(r=>excelPersonKey(r)===excelPersonKey({serial:p.serial_no,personalId:p.personal_id,firstName:p.first_name,lastName:p.last_name}));
+  const hist=!hr.error?(hr.data||[]):[];
+  const modalBox=document.createElement('div');
+  modalBox.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.60);z-index:9999;overflow:auto;padding:20px';
+  const contacts=parseContacts(p.mobile);
+  modalBox.innerHTML=`<div style="max-width:1250px;margin:auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.30)">
+    <div class="toolbar" style="position:sticky;top:0;background:#fff;padding-bottom:12px;z-index:2;border-bottom:1px solid #e5e7eb">
+      <h2 style="margin-right:auto">👤 პიროვნების სრული დოსიე <span class="badge">N: ${esc(p.serial_no??'—')}</span></h2>
+      <button class="btn btn-secondary" onclick="this.closest('[data-person-detail]').remove()">✖ დახურვა</button>
+    </div>
+    <div class="card" style="margin-top:14px;border:1px solid #dbeafe;background:#f8fbff">
+      <div class="toolbar"><h3 style="margin-right:auto">👤 ძირითადი მონაცემები</h3><button class="btn btn-secondary" onclick="this.closest('[data-person-detail]').remove();editPerson('${p.id}')">✏️ რედაქტირება</button></div>
+      <div class="grid" style="margin-top:10px">
+        <div><b>რიგითი უნიკალური №:</b> ${esc(p.serial_no??'—')}</div><div><b>პირადი ID:</b> ${esc(p.personal_id||'—')}</div>
+        <div><b>სახელი:</b> ${esc(p.first_name||'—')}</div><div><b>გვარი:</b> ${esc(p.last_name||'—')}</div>
+        <div><b>თანამდებობა:</b> ${esc(p.position||'—')}</div><div><b>კაბინეტი:</b> ${esc(p.room_no||'—')}</div>
+        <div><b>სართული:</b> ${esc(p.floor??'—')}</div><div><b>შიდა ნომერი:</b> ${esc(p.work_phone||'—')}</div>
+        <div class="full"><b>კონტაქტები:</b> ${contacts.length?contacts.map(esc).join(' • '):'—'}</div>
+        <div class="full"><b>სტატუსი:</b> ${p.employed===false?'<span style="color:#dc2626;font-weight:700">🔴 აღარ მუშაობს</span>':'<span style="color:#15803d;font-weight:700">🟢 მუშაობს</span>'}</div>
+        ${p.notes?`<div class="full"><b>შენიშვნა:</b> ${esc(p.notes)}</div>`:''}
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="toolbar"><h3 style="margin-right:auto">💻 ამ პიროვნებაზე მიბმული ინვენტარი (${inv.length})</h3><button class="btn btn-success" onclick="this.closest('[data-person-detail]').remove();personInventory('${p.id}')">📦 ინვენტარის მართვა</button></div>
+      ${inv.length?`<div class="table-wrap"><table><thead><tr><th>#</th><th>ტიპი</th><th>საინვენტარო №</th><th>დასახელება</th><th>მდგომარეობა</th></tr></thead><tbody>${inv.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r._type)}</td><td><b>${esc(r.inventory_no||'—')}</b></td><td>${esc(r._name||'—')}</td><td>${r.active===false?'🔴 უმოქმედო':'🟢 მოქმედი'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="status">ამ პიროვნებაზე პროგრამაში ინვენტარი არ არის მიბმული.</div>'}
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="toolbar"><h3 style="margin-right:auto">🔄 პასუხისმგებლობის სრული ისტორია (${hist.length})</h3><button class="btn btn-primary" onclick="this.closest('[data-person-detail]').remove();historyView();setTimeout(()=>{const q=document.getElementById('historySearch');if(q){q.value='${escJs(p.serial_no??'')}';q.dispatchEvent(new Event('input'))}},100)">📜 ისტორიის ნახვა</button></div>
+      ${hist.length?`<div class="table-wrap"><table><thead><tr><th>თარიღი</th><th>ინვენტარი</th><th>მოქმედება</th><th>დეტალები</th></tr></thead><tbody>${hist.map(r=>`<tr><td>${esc(r.created_at?new Date(r.created_at).toLocaleString('ka-GE'):'—')}</td><td>${esc(r.inventory_no||'—')}</td><td>${esc(r.action||r.event_type||'—')}</td><td>${esc(r.notes||r.details||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="status">პასუხისმგებლობის ისტორია ცარიელია.</div>'}
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="toolbar"><h3 style="margin-right:auto">📊 Excel-ის მონაცემები (${excelRows.length})</h3><button class="btn btn-secondary" onclick="this.closest('[data-person-detail]').remove();excelView();setTimeout(()=>{const q=document.getElementById('excelSearch');if(q){q.value='${escJs(p.serial_no??'')}';runExcelSearch()}},120)">📊 Excel-ში ნახვა</button></div>
+      ${excelRows.length?`<div class="table-wrap"><table><thead><tr><th>N</th><th>საინვენტარო №</th><th>ტიპი</th><th>Excel მონაცემი</th><th>ფურცელი</th><th>სტრიქონი</th></tr></thead><tbody>${excelRows.map(r=>`<tr><td><b>${esc(r.serial||p.serial_no||'—')}</b></td><td>${esc(r.inventoryNo||'—')}</td><td>${esc(r.category||'—')}</td><td>${esc(r.sourceValue||r.inventoryField||'—')}</td><td>${esc(r.sheet||'—')}</td><td>${esc(r.row||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="status">ამ N-ზე შენახულ Excel მონაცემში ჩანაწერი ვერ მოიძებნა.</div>'}
+    </div>
+    <div class="card" style="margin-top:14px;border:1px solid #e9d5ff;background:#faf5ff">
+      <div class="toolbar"><h3 style="margin-right:auto">📄 დოკუმენტები</h3></div>
+      <div id="personDocs_${escJs(p.id)}" class="status">დოკუმენტების სია ჩაიტვირთება...</div>
+    </div>
+    <div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-warning" onclick="printPerson('${p.id}')">🖨️ სრული ინვენტარის ბეჭდვა</button>
+      <button class="btn btn-primary" onclick="printAct('${p.id}')">📄 მიღება-ჩაბარების აქტის ბეჭდვა</button>
+    </div>
+  </div>`;
+  modalBox.setAttribute('data-person-detail','1');
+  modalBox.onclick=e=>{if(e.target===modalBox)modalBox.remove()};
+  document.body.appendChild(modalBox);
+  loadPersonDocuments(pid);
+}
+
+async function loadPersonDocuments(pid){
+  const box=document.getElementById('personDocs_'+String(pid).replace(/[^a-zA-Z0-9_-]/g,''));
+  if(!box)return;
+  try{
+    const q=await db.from('person_documents').select('*').eq('person_id',pid).order('created_at',{ascending:false});
+    if(q.error){box.innerHTML='<div class="hint">ℹ️ დოკუმენტების ცალკე მოდული ამ V20 ბაზაში ჯერ არ არის დაკავშირებული. დანარჩენი დოსიეს ფუნქციები სრულად მუშაობს.</div>';return}
+    const docs=q.data||[];
+    if(!docs.length){box.innerHTML='<div class="status">ამ პიროვნებაზე ატვირთული დოკუმენტი ჯერ არ არის.</div>';return}
+    box.innerHTML='<div class="table-wrap"><table><thead><tr><th>დოკუმენტი</th><th>ტიპი</th><th>თარიღი</th><th>მოქმედება</th></tr></thead><tbody>'+docs.map(d=>`<tr><td>${esc(d.file_name||d.name||'დოკუმენტი')}</td><td>${esc(d.file_type||'—')}</td><td>${esc(d.created_at?new Date(d.created_at).toLocaleString('ka-GE'):'—')}</td><td>${d.file_url?`<button class="btn btn-secondary" onclick="window.open('${escJs(d.file_url)}','_blank')">📂 გახსნა</button><a class="btn btn-primary" href="${esc(d.file_url)}" target="_blank" download>⬇️ ჩამოტვირთვა</a>`:'—'}</td></tr>`).join('')+'</tbody></table></div>';
+  }catch(err){box.innerHTML='<div class="status" style="color:#b91c1c">დოკუმენტების ჩატვირთვის შეცდომა: '+esc(err.message||err)+'</div>'}
+}
+
+async function personsView(){section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">👤 პიროვნებები</h2><input class="search" id="personSearch" placeholder="🔎 სახელი, გვარი, ID, კაბინეტი..." oninput="filterPersons()"><button class="btn btn-primary" onclick="openPersonForm()">➕ ახალი პიროვნების დამატება</button></div><div class="table-wrap"><table><thead><tr><th>რიგითი №</th><th>სახელი / გვარი</th><th>პირადი ID</th><th>თანამდებობა</th><th>კონტაქტები</th><th>კაბინეტი</th><th>სართული</th><th>ინვენტარი</th><th>მოქმედება</th></tr></thead><tbody id="personBody"></tbody></table></div></div>`;setStatus('⚡ პიროვნებები იტვირთება...');let data=fastCache.persons;if(!data || Date.now()-fastCache.personsAt>60000){const q=await db.from('persons').select('*').order('created_at',{ascending:false});if(q.error){setStatus('შეცდომა: '+q.error.message,true);return}data=q.data||[];fastCache.persons=data;fastCache.personsAt=Date.now()}window.personRows=data||[];await renderPersons();setStatus('დაკავშირებულია • '+window.personRows.length+' პიროვნება')}
+async function renderPersons(){const b=document.getElementById('personBody');let counts=fastCache.counts;if(!counts || Date.now()-fastCache.countsAt>30000){counts={};await Promise.all(inventoryTables.map(async x=>{const {data}=await db.from(x.table).select('person_id').not('person_id','is',null);for(const r of (data||[])){if(r.person_id)counts[r.person_id]=(counts[r.person_id]||0)+1}}));fastCache.counts=counts;fastCache.countsAt=Date.now()}b.innerHTML=window.personRows.map(p=>{const cs=parseContacts(p.mobile);return `<tr data-search="${esc([p.serial_no,p.first_name,p.last_name,p.personal_id,p.position,p.room_no,p.floor,p.mobile].join(' ').toLowerCase())}"><td><b>${esc(p.serial_no??'')}</b></td><td><b class="${p.employed===false?'person-left':''}">${esc(p.first_name)} ${esc(p.last_name)}</b>${p.employed===false?'<br><span style="color:#dc2626;font-weight:700">🔴 აღარ მუშაობს</span>':''}<br><span class="badge">ID: ${esc(p.id)}</span></td><td>${esc(p.personal_id)}</td><td>${esc(p.position)}</td><td>${cs.map(esc).join('<br>')}</td><td>${esc(p.room_no)}</td><td>${esc(p.floor)}</td><td><b>${counts[p.id]||0}</b> ობიექტი</td><td class="actions"><button class="btn-success" onclick="personInventory('${p.id}')">📦 ინვენტარი</button><button class="btn-secondary" onclick="editPerson('${p.id}')">✏️</button><button class="btn-danger" onclick="deletePerson('${p.id}')">🗑️</button><button class="btn-warning" onclick="printPerson('${p.id}')">🖨️</button><button class="btn-primary" onclick="printAct('${p.id}')">📄 აქტი</button></td></tr>`}).join('')}
 function filterPersons(){const q=(personSearch.value||'').toLowerCase();document.querySelectorAll('#personBody tr').forEach(r=>r.style.display=r.dataset.search.includes(q)?'':'none')}
 function parseContacts(v){return String(v||'').split(/\s*(?:\/|;|\n|,|\|)\s*/).map(x=>x.trim()).filter(Boolean).slice(0,4)}
 function roomParts(v){const m=String(v||'').match(/^([A-E])\s*[-№ ]?\s*(.*)$/i);return m?{cab:m[1].toUpperCase(),num:m[2]||''}:{cab:'',num:v||''}}
@@ -157,11 +378,11 @@ async function savePerson(e){e.preventDefault();const contacts=[0,1,2,3].map(i=>
    try{const tr=await transferInventoryToPerson(inventoryNo,result.data.id,inventoryType);if(tr.cancelled)alert('პიროვნება დაემატა, მაგრამ საინვენტარო ნომერი ძველ მომხმარებელს დარჩა.');else if(tr.created)alert(tr.writeoff?'📕 ჩამოწერილი ნომერი იყო, მაგრამ შენი დადასტურებით შეიქმნა ახალი აქტიური ინვენტარი და მიება პიროვნებას.':'✅ ახალი ინვენტარი შეიქმნა და პიროვნებას მიება.');else alert(tr.writeoff?'📕 ნომერი ჩამოწერის ისტორიაშიც ფიქსირდება და ამ პიროვნებაზე მიება.':'✅ პიროვნება დაემატა და საინვენტარო ნომერი პასუხისმგებლობაში მიება.');}
    catch(err){alert('პიროვნება დაემატა, მაგრამ საინვენტარო ნომერი ვერ მიება:\n'+err.message);}
  }
- closeModal();await personsView()}
+ clearFastCache();closeModal();await personsView()}
 
 async function checkPersonSerial(){const el=document.getElementById('p_serial_status');const inp=document.getElementById('p_serial');if(!el||!inp)return;const raw=inp.value.trim();if(!raw){el.innerHTML='<span style="color:#b91c1c">❌ მიუთითე რიგითი ნომერი.</span>';return}const n=Number(raw);if(!Number.isInteger(n)||n<1){el.innerHTML='<span style="color:#b91c1c">❌ რიგითი ნომერი უნდა იყოს დადებითი მთელი რიცხვი.</span>';return}const {data,error}=await db.from('persons').select('id,first_name,last_name').eq('serial_no',n).limit(1);if(error){el.innerHTML='<span style="color:#b91c1c">შემოწმების შეცდომა: '+esc(error.message)+'</span>';return}if(data?.length&&data[0].id!==editingId){el.innerHTML=`<span style="color:#b91c1c">🔴 რიგითი № ${n} დაკავებულია — ${esc(`${data[0].first_name||''} ${data[0].last_name||''}`.trim())}. მიუთითე სხვა ნომერი.</span>`}else el.innerHTML=`<span style="color:#15803d">🟢 რიგითი № ${n} თავისუფალია.</span>`}
 async function editPerson(id){const {data,error}=await db.from('persons').select('*').eq('id',id).single();if(error){alert(error.message);return}openPersonForm(data)}
-async function deletePerson(id){const {data:p}=await db.from('persons').select('*').eq('id',id).single();if(!p)return;if(!confirm(`წაიშალოს ${p.first_name} ${p.last_name}?`))return;const n=await countPersonInventory(id);if(n){alert('პიროვნებაზე მიბმულია '+n+' საინვენტარო ობიექტი. ჯერ მოხსენით პასუხისმგებლობა.');return}const {error}=await db.from('persons').delete().eq('id',id);if(error)alert('წაშლის შეცდომა: '+error.message);else personsView()}
+async function deletePerson(id){const {data:p}=await db.from('persons').select('*').eq('id',id).single();if(!p)return;if(!confirm(`წაიშალოს ${p.first_name} ${p.last_name}?`))return;const n=await countPersonInventory(id);if(n){alert('პიროვნებაზე მიბმულია '+n+' საინვენტარო ობიექტი. ჯერ მოხსენით პასუხისმგებლობა.');return}const {error}=await db.from('persons').delete().eq('id',id);if(error)alert('წაშლის შეცდომა: '+error.message);else{clearFastCache();personsView()}}
 
 async function countPersonInventory(pid){let n=0;for(const x of inventoryTables){const {data}=await db.from(x.table).select('id').eq('person_id',pid);n+=(data||[]).length}return n}
 async function personInventory(pid){const {data:p,error}=await db.from('persons').select('*').eq('id',pid).single();if(error){alert(error.message);return}currentPerson=p;modalTitle.textContent='📦 '+p.first_name+' '+p.last_name+' — ინვენტარი';let all=[];for(const x of inventoryTables){const {data}=await db.from(x.table).select('*').eq('person_id',pid);for(const r of (data||[]))all.push({...r,_type:x.type,_table:x.table,_key:x.key,_name:r[x.nameField]||r.model||''})}recordForm.onsubmit=e=>e.preventDefault();recordForm.innerHTML=`<div class="person-box"><b>პასუხისმგებელი:</b> ${esc(p.first_name)} ${esc(p.last_name)}<br><b>თანამდებობა:</b> ${esc(p.position||'')}<br><b>კაბინეტი:</b> ${esc(p.room_no||'')} • <b>სართული:</b> ${esc(p.floor||'')}</div><div class="card" style="margin:12px 0;padding:14px;background:#f8fbff;border:1px solid #dbeafe"><h3 style="margin-top:0">➕ არსებული ინვენტარის ამ პიროვნებაზე დაწერა</h3><div class="grid"><div class="field"><label>1. აირჩიე ინვენტარის ტიპი *</label><select id="directInvType" onchange="prepareDirectInventory()"><option value="">აირჩიე...</option>${inventoryTables.map(x=>`<option value="${x.table}">${esc(x.type)}</option>`).join('')}</select></div><div class="field"><label>2. ჩაწერე საინვენტარო ნომერი *</label><input id="directInvNo" placeholder="მაგ. 12345" oninput="clearDirectInventoryStatus()" onblur="checkDirectInventory()"></div><div class="field full"><div id="directInvStatus" class="hint">ჯერ აირჩიე ინვენტარის ტიპი და ჩაწერე საინვენტარო ნომერი.</div></div></div><button class="btn btn-success" type="button" onclick="assignDirectInventory('${pid}')">🔗 დაწერა ამ პიროვნებაზე</button></div><div class="toolbar"><h3 style="margin-right:auto">მიბმული ინვენტარი (${all.length})</h3><button class="btn btn-warning" type="button" onclick="printPerson('${pid}')">🖨️ ბეჭდვა</button><button class="btn btn-primary" type="button" onclick="printAct('${pid}')">📄 მიღება-ჩაბარების აქტი</button></div><div class="table-wrap"><table><thead><tr><th>ტიპი</th><th>საინვენტარო №</th><th>ობიექტი</th><th>მოქმედება</th></tr></thead><tbody>${all.map(r=>`<tr><td>${esc(r._type)}</td><td><b>${esc(r.inventory_no)}</b></td><td>${esc(r._name)}<br>${r.active===false?'<span style="color:#dc2626;font-weight:700">🔴 უმოქმედო / შენახულია</span>':'<span style="color:#15803d">🟢 მოქმედებაშია</span>'}</td><td><button class="btn-danger" onclick="removeResponsibility('${r._table}','${r.id}','${pid}','${esc(r.inventory_no)}')">↩️ პასუხისმგებლობიდან მოხსნა</button></td></tr>`).join('')}</tbody></table></div><br><button class="btn btn-secondary" type="button" onclick="closeModal()">დახურვა</button>`;modal.classList.add('show')}
@@ -209,11 +430,515 @@ async function deleteMessengerMessage(id){if(!confirm('წაიშალოს 
 async function historyView(){currentType='history';section.innerHTML='<div class="card"><div class="toolbar"><h2 style="margin-right:auto">🔄 პასუხისმგებლობის გადაცემის ისტორია</h2><input class="search" id="historySearch" placeholder="🔎 ძებნა..." oninput="filterTableGeneric(\'historyBody\')"></div><div class="table-wrap"><table><thead><tr><th>თარიღი</th><th>საინვენტარო №</th><th>ტიპი</th><th>ძველი პასუხისმგებელი</th><th>ახალი პასუხისმგებელი</th><th>კომენტარი</th></tr></thead><tbody id="historyBody"></tbody></table></div></div>';const {data,error}=await db.from('responsibility_history').select('*').order('changed_at',{ascending:false});if(error){setStatus('ისტორიის შეცდომა: '+error.message,true);return}let people={};const ids=[...(data||[]).flatMap(x=>[x.from_person_id,x.to_person_id]).filter(Boolean)];if(ids.length){const {data:ps}=await db.from('persons').select('id,first_name,last_name').in('id',ids);(ps||[]).forEach(p=>people[p.id]=p.first_name+' '+p.last_name)}historyBody.innerHTML=(data||[]).map(r=>`<tr data-search="${esc(Object.values(r).join(' ').toLowerCase())}"><td>${esc(r.changed_at||r.created_at||'')}</td><td>${esc(r.inventory_no)}</td><td>${esc(r.inventory_type)}</td><td>${esc(people[r.from_person_id]||r.from_person_id||'—')}</td><td>${esc(people[r.to_person_id]||r.to_person_id||'—')}</td><td>${esc(r.comment||'')}</td></tr>`).join('')}
 function filterTableGeneric(id){const q=(document.getElementById(id.replace('Body','Search'))?.value||'').toLowerCase();document.querySelectorAll('#'+id+' tr').forEach(r=>r.style.display=(r.dataset.search||'').includes(q)?'':'none')}
 
-async function globalSearchView(){section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">🔎 მთელ სისტემაში საინვენტარო ნომრის ძებნა</h2><input id="globalInv" class="search" placeholder="შეიყვანე საინვენტარო №"><select id="globalStatus" style="max-width:220px"><option value="all">ყველა</option><option value="free">🟡 თავისუფალი</option><option value="used">🟢 გამოყენებაში</option><option value="written">🔴 ჩამოწერილი</option></select><button class="btn btn-primary" onclick="runGlobalSearch()">ძებნა</button></div><div id="globalResults"></div></div>`;globalInv.focus()}
-async function runGlobalSearch(){const q=globalInv.value.trim().toLowerCase();if(!q){globalResults.innerHTML='<div class="status">შეიყვანე საინვენტარო ნომერი.</div>';return}let rows=[];for(const x of inventoryTables){const {data,error}=await db.from(x.table).select('*');if(error)continue;for(const r of (data||[])){if(String(r.inventory_no||'').toLowerCase().includes(q))rows.push({...r,_type:x.type,_table:x.table,_name:r[x.nameField]||r.model||''})}}const {data:wo}=await db.from('inventory_writeoffs').select('*');for(const r of (wo||[])){if(String(r.inventory_no||'').toLowerCase().includes(q))rows.push({...r,_type:'📕 ჩამოწერილი',_written:true,_name:r.object_name||''})}const filtered=rows.filter(r=>{const s=r._written?'written':r.person_id?'used':'free';return globalStatus.value==='all'||globalStatus.value===s});if(!filtered.length){globalResults.innerHTML='<div class="inv-status inv-none">⚪ ასეთი ნომერი არ მოიძებნა.</div>';return}const people={};const ids=filtered.map(r=>r.person_id).filter(Boolean);if(ids.length){const {data:ps}=await db.from('persons').select('id,first_name,last_name').in('id',ids);(ps||[]).forEach(p=>people[p.id]=p.first_name+' '+p.last_name)}globalResults.innerHTML=`<div class="table-wrap"><table><thead><tr><th>სტატუსი</th><th>ტიპი</th><th>№</th><th>ობიექტი</th><th>პასუხისმგებელი</th><th>მოქმედება</th></tr></thead><tbody>${filtered.map(r=>{const s=r._written?'written':r.person_id?'used':'free';return `<tr><td>${s==='free'?'🟡 თავისუფალი':s==='used'?'🟢 გამოყენებაში':'🔴 ჩამოწერილი'}</td><td>${esc(r._type)}</td><td><b>${esc(r.inventory_no)}</b></td><td>${esc(r._name)}</td><td>${esc(people[r.person_id]||r.person_id||'—')}</td><td>${s==='free'?'<span class="badge">თავისუფალია — შესაძლებელია მიბმა</span>':s==='used'?'<span class="badge">გადაცემა შესაძლებელია თანხმობით</span>':'<span class="badge">ჩამოწერილია</span>'}</td></tr>`}).join('')}</tbody></table></div>`}
 
-async function getPersonAll(pid){let all=[];for(const x of inventoryTables){const {data}=await db.from(x.table).select('*').eq('person_id',pid);for(const r of (data||[]))all.push({...r,_type:x.type,_name:r[x.nameField]||r.model||''})}return all}
+/* EXCEL IMPORT / SEARCH ENGINE */
+let excelImportedRows=[], excelImportedPeople=[], excelImportedMeta={fileName:"",sheets:0,people:0,inventoryRefs:0,loadedAt:""};
+
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector('script[data-excel-lib]')) return resolve(true);
+    const s=document.createElement('script');s.src=src;s.dataset.excelLib="1";
+    s.onload=()=>resolve(true);s.onerror=()=>reject(new Error("Excel-ის ბიბლიოთეკის ჩატვირთვა ვერ მოხერხდა."));
+    document.head.appendChild(s);
+  });
+}
+function excelClean(v){return String(v??'').replace(/\s+/g,' ').trim()}
+function excelIsInventoryHeader(h){
+  h=excelClean(h).toLowerCase();
+  if(!h)return false;
+  const keys=['კეისი','ქეისი','case','მონიტორ','monitor','voip','ups','hdd','ssd','პრინტერ','printer','სკანერ','scanner','სკამ','chair','მაგიდა','desk','სეიფ','notebook','tv','dvd','ვინჩესტერ','ვიდეოკარტ','აკუმულატორ','switch','ქვიჩ'];
+  return keys.some(k=>h.includes(k));
+}
+function excelExtractRefs(value){
+  const s=excelClean(value); if(!s)return [];
+  const out=[]; const invRx=/(?<!\d)(\d{3,6})(?!\d)/g; let m;
+  while((m=invRx.exec(s))!==null){
+    const n=m[1];
+    if(!out.includes(n))out.push(n);
+  }
+  return out;
+}
+function excelNameFromRow(headers,row){
+  let first='',last='';
+  headers.forEach((h,i)=>{
+    const k=excelClean(h).toLowerCase(),v=excelClean(row[i]);
+    if(!v)return;
+    if(k==='სახელი'||k==='first name'||k.includes('სახელი')) first=first||v;
+    if(k==='გვარი'||k==='last name'||k.includes('გვარი')) last=last||v;
+  });
+  return {first,last,full:[first,last].filter(Boolean).join(' ')};
+}
+function excelPersonIdFromRow(headers,row){
+  const n=excelNameFromRow(headers,row);
+  let id='',room='',floor='',serial='';
+  const phones=[];
+  headers.forEach((h,i)=>{
+    const k=excelClean(h).toLowerCase(),v=excelClean(row[i]);
+    if(!v)return;
+    if(k==='id'||k==='პირადი id'||k.includes('პირადი')) id=id||v;
+    if(k.includes('საკონტაქტო')||k.includes('მობილ')||k.includes('ტელეფონ')) phones.push(v);
+    if(k==='n'||k==='№') serial=serial||v;
+    else if(!serial && k.includes('რიგითი')) serial=v;
+    if(k.includes('სართული')) floor=floor||v;
+    if(k.includes('ოთახ')) room=room||v;
+  });
+  const contacts=[];
+  phones.forEach(v=>excelParseContacts(v).forEach(x=>{if(!contacts.includes(x)&&contacts.length<4)contacts.push(x)}));
+  return {first:n.first,last:n.last,full:n.full,personalId:id,phone:contacts.join(' / '),contacts,room,floor,serial};
+}
+function excelNormalizeWorkbook(workbook){
+  const records=[], peopleMap=new Map(), invMap=new Map(), sheetNames=workbook.SheetNames||[];
+  sheetNames.forEach(sheetName=>{
+    const ws=workbook.Sheets[sheetName]; const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
+    if(!rows.length)return;
+    let headerIndex=0;
+    while(headerIndex<Math.min(rows.length,10)&&rows[headerIndex].filter(x=>excelClean(x)).length===0)headerIndex++;
+    const headers=(rows[headerIndex]||[]).map((x,i)=>excelClean(x)||('სვეტი '+(i+1)));
+    const invCols=headers.map((h,i)=>excelIsInventoryHeader(h)?i:-1).filter(i=>i>=0);
+    const hasNames=headers.some(h=>{const k=h.toLowerCase();return k==='სახელი'||k.includes('სახელი')}) &&
+                  headers.some(h=>{const k=h.toLowerCase();return k==='გვარი'||k.includes('გვარი')});
+    for(let ri=headerIndex+1;ri<rows.length;ri++){
+      const row=rows[ri]||[]; if(!row.some(x=>excelClean(x)))continue;
+      const person=excelPersonIdFromRow(headers,row);
+      const refs=[];
+      invCols.forEach(ci=>excelExtractRefs(row[ci]).forEach(ref=>refs.push({inventoryNo:ref,field:headers[ci],value:excelClean(row[ci])})));
+      // Sheets with explicit case/monitor/inventory columns are also useful even when names are absent.
+      if(!refs.length && !hasNames) continue;
+      if(person.full){
+        const key=excelPersonKey(person) || (sheetName+'#'+ri);
+        if(!peopleMap.has(key))peopleMap.set(key,{...person,sheets:new Set([sheetName])});
+        else peopleMap.get(key).sheets.add(sheetName);
+      }
+      refs.forEach(ref=>{
+        const rec={sheet:sheetName,row:ri+1,personName:person.full,firstName:person.first,lastName:person.last,personalId:person.personalId,phone:person.phone,room:person.room,floor:person.floor,serial:person.serial,inventoryNo:ref.inventoryNo,inventoryField:ref.field,sourceValue:ref.value,category:excelGuessTable(ref.field,ref.value),cancelled:/გაუქმებულ|ჩამოწერილ|ჩამოწერა|cancel/i.test((ref.field||'')+' '+(ref.value||''))};
+        records.push(rec);
+        const ik=ref.inventoryNo;
+        if(!invMap.has(ik))invMap.set(ik,[]);
+        invMap.get(ik).push(rec);
+      });
+    }
+    // Special compact sheets: NOTEBOOK has a person and a notebook number but may not have a generic inventory header.
+    if(sheetName.toLowerCase()==='notebook'){
+      for(let ri=headerIndex+1;ri<rows.length;ri++){
+        const row=rows[ri]||[]; const person=excelPersonIdFromRow(headers,row);
+        const idx=headers.findIndex(h=>h.toLowerCase().includes('notebook'));
+        if(idx>=0){excelExtractRefs(row[idx]).forEach(ref=>{const rec={sheet:sheetName,row:ri+1,personName:person.full,firstName:person.first,lastName:person.last,personalId:person.personalId,phone:person.phone,room:person.room,floor:person.floor,serial:person.serial,inventoryNo:ref,inventoryField:headers[idx],sourceValue:excelClean(row[idx]),category:'computers',cancelled:false};records.push(rec);if(!invMap.has(ref))invMap.set(ref,[]);invMap.get(ref).push(rec);});}
+      }
+    }
+  });
+  excelImportedRows=records;
+  excelImportedPeople=[...peopleMap.values()].map(p=>({...p,sheets:[...p.sheets]}));
+  excelImportedMeta={fileName:excelImportedMeta.fileName,sheets:sheetNames.length,people:excelImportedPeople.length,inventoryRefs:records.length,loadedAt:new Date().toISOString()};
+  return {records,people:excelImportedPeople,invMap};
+}
+async function saveExcelImport(){
+  try{
+    const d=await idbOpen();
+    await new Promise((res,rej)=>{const tx=d.transaction("excel_import","readwrite");tx.objectStore("excel_import").put({rows:excelImportedRows,people:excelImportedPeople,meta:excelImportedMeta},"current");tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
+  }catch(e){console.warn("Excel IndexedDB save",e)}
+}
+async function loadExcelImport(){
+  try{
+    const d=await idbOpen();
+    return await new Promise((res,rej)=>{const tx=d.transaction("excel_import","readonly");const r=tx.objectStore("excel_import").get("current");r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error)});
+  }catch(e){return null}
+}
+async function handleExcelUpload(input){
+  const file=input.files?.[0]; if(!file)return;
+  try{
+    setStatus("📊 Excel იკითხება...");
+    await loadScriptOnce("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js");
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:"array",cellDates:true});
+    excelImportedMeta.fileName=file.name;
+    const out=excelNormalizeWorkbook(wb);
+    await saveExcelImport();
+    setStatus("🟢 Excel ჩაიტვირთა • "+out.records.length+" საინვენტარო კავშირი");
+    await excelView();
+  }catch(e){
+    console.error(e); setStatus("⚠️ Excel-ის ჩატვირთვის შეცდომა: "+e.message,true);
+    alert("Excel-ის ჩატვირთვის შეცდომა:\n"+e.message);
+  }finally{input.value=''}
+}
+
+function excelGuessTable(field, value){
+  const s=(String(field||'')+' '+String(value||'')).toLowerCase();
+  if(/notebook|ლეპტოპ/.test(s)) return 'computers';
+  if(/კეისი|ქეისი|case|კომპიუტ|computer/.test(s)) return 'computers';
+  if(/მონიტორ|monitor/.test(s)) return 'monitors';
+  if(/პრინტერ|printer/.test(s)) return 'printers';
+  if(/სკანერ|scanner/.test(s)) return 'scanners';
+  if(/(^|[^a-z])ups([^a-z]|$)|ups|უპს/.test(s)) return 'ups';
+  if(/გარე[- ]?ვინჩესტერ|external.*(hdd|ssd)|გარე.*hdd|გარე.*ssd/.test(s)) return 'external_drives';
+  if(/hdd|ssd|ვინჩესტერ|დისკ/.test(s)) return 'internal_drives';
+  if(/voip|ip ტელ|ტელეფონ/.test(s)) return 'voip_phones';
+  if(/მაგიდა|desk/.test(s)) return 'desks';
+  if(/სკამ|სავარძ|chair/.test(s)) return 'chairs';
+  if(/მაცივარ|refrigerator/.test(s)) return 'refrigerators';
+  return 'other_inventory';
+}
+function excelSafeName(r){
+  return excelClean(r.sourceValue||'').replace(/\b\d{3,6}\b/g,'').replace(/[:;]+/g,' ').trim() || ('Excel '+(r.inventoryField||'ინვენტარი'));
+}
+function excelSerialKey(v){const s=String(v??'').trim();if(!s)return '';const n=Number(s);return Number.isFinite(n)&&Number.isInteger(n)&&n>0?String(n):s.replace(/\.0+$/,'')}
+function excelPersonKey(p){return excelSerialKey(p.serial) || String(p.personalId||'').trim() || String(p.full||'').trim().toLowerCase() || ('excel-person-'+Math.random())}
+async function buildExcelImportPlan(){
+  if(!sb||offlineMode||!navigator.onLine) throw new Error('Supabase-ში იმპორტისთვის ინტერნეტთან დაკავშირება აუცილებელია.');
+  if(!excelImportedRows.length && !excelImportedPeople.length) throw new Error('ჯერ Excel არ არის ჩატვირთული.');
+  const [pr, ...invResults]=await Promise.all([
+    sb.from('persons').select('id,serial_no,first_name,last_name,personal_id,room_no,floor,mobile,work_phone'),
+    ...inventoryTables.map(x=>sb.from(x.table).select('id,inventory_no,person_id'))
+  ]);
+  if(pr.error) throw new Error('პიროვნებების წაკითხვა ვერ მოხერხდა: '+pr.error.message);
+  const existingPeople=pr.data||[];
+  const existingInv=new Map(), existingInvByNumber=new Map();
+  inventoryTables.forEach((x,i)=>{const rr=invResults[i];if(rr?.data)rr.data.forEach(r=>{const key=x.table+'|'+String(r.inventory_no);existingInv.set(key,{...r,_table:x.table,_type:x.type});const n=String(r.inventory_no||'').trim();if(n&&!existingInvByNumber.has(n))existingInvByNumber.set(n,{...r,_table:x.table,_type:x.type});});});
+
+  // Excel-ში ერთი N = ერთი პიროვნება. თუ ერთი და იგივე N სხვადასხვა სახელით/ID-ით გვხვდება,
+  // ეს ითვლება მონაცემთა კონფლიქტად და იმპორტი ავტომატურად არ უნდა მოხდეს.
+  const peopleMap=new Map(), personConflicts=[];
+  const addExcelPerson=(p,sourceLabel)=>{
+    if(!p?.first&&!p?.last&&!p?.personalId&&!p?.serial)return;
+    const key=excelPersonKey(p);
+    if(!peopleMap.has(key)){peopleMap.set(key,{...p,sheets:p.sheets||[],sources:[sourceLabel]});return;}
+    const old=peopleMap.get(key);
+    old.sheets=[...new Set([...(old.sheets||[]),...(p.sheets||[])])];
+    old.sources=[...new Set([...(old.sources||[]),sourceLabel])];
+    const sameName=String(old.full||'').trim().toLowerCase()===String(p.full||'').trim().toLowerCase();
+    const samePid=!old.personalId||!p.personalId||String(old.personalId).trim()===String(p.personalId).trim();
+    if(!sameName||!samePid){
+      old.conflict=true;
+      old.conflictDetails=old.conflictDetails||[];
+      old.conflictDetails.push({name:old.full||'',personalId:old.personalId||'',otherName:p.full||'',otherPersonalId:p.personalId||'',source:sourceLabel});
+    }
+  };
+  excelImportedPeople.forEach(p=>addExcelPerson(p,(p.sheets||[]).join(', ')||'Excel'));
+  excelImportedRows.forEach(r=>{if(r.personName)addExcelPerson({first:r.firstName,last:r.lastName,full:r.personName,personalId:r.personalId,phone:r.phone,room:r.room,serial:r.serial},r.sheet+' #'+r.row);});
+
+  const personPlans=[...peopleMap.values()].map(p=>{
+    let match=null, matchBy='';
+    const serial=excelSerialKey(p.serial);
+    if(serial){match=existingPeople.find(x=>excelSerialKey(x.serial_no)===serial);if(match)matchBy='N / რიგითი უნიკალური №';}
+    if(!match&&p.personalId){match=existingPeople.find(x=>String(x.personal_id||'').trim()===String(p.personalId).trim());if(match)matchBy='პირადი ID';}
+    if(!match&&p.first&&p.last){match=existingPeople.find(x=>String(x.first_name||'').trim().toLowerCase()===String(p.first).trim().toLowerCase()&&String(x.last_name||'').trim().toLowerCase()===String(p.last).trim().toLowerCase());if(match)matchBy='სახელი + გვარი';}
+    let conflict=!!p.conflict;
+    let conflictReason=conflict?'Excel-ში ერთი N სხვადასხვა პიროვნებას/ID-ს შეესაბამება.':'';
+    if(match){
+      const dbName=`${match.first_name||''} ${match.last_name||''}`.trim().toLowerCase(), exName=String(p.full||'').trim().toLowerCase();
+      const dbPid=String(match.personal_id||'').trim(), exPid=String(p.personalId||'').trim();
+      const nameCheck=!!exName && !!dbName && dbName!==exName;
+      const idCheck=!!exPid && !!dbPid && exPid!==dbPid;
+      if(serial && (nameCheck || idCheck)){conflict=true;conflictReason=idCheck&&!nameCheck?'Excel-ის N ემთხვევა, მაგრამ ორივე შევსებული პირადი ID განსხვავებულია.':'Excel-ის N უკვე არსებობს, მაგრამ შევსებული სახელი ან პირადი ID არ ემთხვევა პროგრამის ჩანაწერს.';}
+    }
+    return {source:p,existing:match||null,matchBy,conflict,conflictReason};
+  });
+  const personConflictKeys=new Set(personPlans.filter(x=>x.conflict).map(x=>excelPersonKey(x.source)));
+  const invPlans=[], seen=new Set();
+  excelImportedRows.forEach(r=>{
+    if(!r.inventoryNo)return;
+    const table=excelGuessTable(r.inventoryField,r.sourceValue), key=table+'|'+String(r.inventoryNo);
+    if(seen.has(key))return; seen.add(key);
+    const exact=existingInv.get(key)||null, globalExisting=existingInvByNumber.get(String(r.inventoryNo));
+    const pKey=excelPersonKey({serial:r.serial,personalId:r.personalId,full:r.personName,first:r.firstName,last:r.lastName});
+    invPlans.push({row:r,table,existing:exact||globalExisting||null,conflict:globalExisting&&globalExisting._table!==table?globalExisting:null,personConflict:personConflictKeys.has(pKey)});
+  });
+  return {personPlans,invPlans,existingPeople,existingInv,existingInvByNumber,personConflictKeys};
+}
+async function showExcelImportPreview(){
+  const box=document.getElementById('excelImportPreview'); if(!box)return;
+  try{
+    box.innerHTML='<div class="status">🔎 ბაზასთან შედარება მიმდინარეობს...</div>';
+    const plan=await buildExcelImportPlan();
+    const newPeople=plan.personPlans.filter(x=>!x.existing&&!x.conflict), personConflicts=plan.personPlans.filter(x=>x.conflict);
+    const newInv=plan.invPlans.filter(x=>!x.existing&&!x.conflict&&!x.personConflict), existingInv=plan.invPlans.filter(x=>x.existing&&!x.conflict&&!x.personConflict), conflicts=plan.invPlans.filter(x=>x.conflict), blockedByPerson=plan.invPlans.filter(x=>x.personConflict);
+    window.__excelImportPlan=plan;
+    box.innerHTML=`<div class="excel-summary">
+      <div class="excel-stat"><b>${plan.personPlans.length}</b> Excel პიროვნება</div>
+      <div class="excel-stat"><b>${newPeople.length}</b> ახალი პიროვნება</div>
+      <div class="excel-stat"><b>${personConflicts.length}</b> პიროვნების კონფლიქტი</div>
+      <div class="excel-stat"><b>${plan.invPlans.length}</b> უნიკალური ინვენტარი</div>
+      <div class="excel-stat"><b>${newInv.length}</b> ახალი ინვენტარი</div>
+      <div class="excel-stat"><b>${existingInv.length}</b> უკვე არსებული</div><div class="excel-stat"><b>${conflicts.length}</b> კატეგორიის კონფლიქტი</div><div class="excel-stat"><b>${blockedByPerson.length}</b> დაბლოკილი N-ის გამო</div>
+    </div>
+    <div class="hint" style="margin-top:10px">🟢 ახალი დაემატება; ⚪ უკვე არსებული არ გადაიწერება; 🔴 კონფლიქტი ავტომატურად არ იმპორტირდება. <b>N არის მთავარი პიროვნების იდენტიფიკატორი.</b> პირადი ID Excel-ში თუ ცარიელია, ეს შეცდომა არ არის.</div>
+    ${personConflicts.length?`<div class="inv-status inv-used" style="margin-top:12px"><b>🔴 პიროვნების კონფლიქტები</b><div style="margin-top:8px;max-height:240px;overflow:auto"><table><thead><tr><th>N</th><th>Excel პიროვნება</th><th>პროგრამაში</th><th>მიზეზი</th></tr></thead><tbody>${personConflicts.map(x=>{const p=x.source,m=x.existing;return `<tr><td><b>${esc(p.serial||'—')}</b></td><td>${esc(p.full||'—')} ${p.personalId?'• ID '+esc(p.personalId):''}</td><td>${m?esc(`${m.first_name||''} ${m.last_name||''}`.trim())+(m.personal_id?' • ID '+esc(m.personal_id):''):'—'}</td><td>${esc(x.conflictReason)}</td></tr>`}).join('')}</tbody></table></div></div>`:''}
+    <div style="margin-top:12px;max-height:380px;overflow:auto"><table><thead><tr><th>N</th><th>პიროვნება</th><th>შედეგი</th><th>ინვენტარი №</th><th>კატეგორია</th><th>შედეგი</th></tr></thead><tbody>${plan.invPlans.slice(0,500).map(x=>{const p=x.row.personName||'—';const pp=plan.personPlans.find(z=>excelPersonKey(z.source)===excelPersonKey({serial:x.row.serial,personalId:x.row.personalId,full:x.row.personName,first:x.row.firstName,last:x.row.lastName}));const pr=pp?.conflict?'🔴 N კონფლიქტი':pp?.existing?'⚪ '+(pp.matchBy||'არსებული'):'🟢 ახალი';const result=x.personConflict?'🔴 პიროვნების კონფლიქტის გამო არ დაემატება':x.conflict?'🔴 კატეგორიის კონფლიქტი: '+(x.existing?x.existing._type:'სხვა კატეგორია'):x.existing?'⚪ უკვე არსებობს':'🟢 დაემატება';return `<tr><td><b>${esc(x.row.serial||'—')}</b></td><td>${esc(p)}</td><td>${pr}</td><td><b>${esc(x.row.inventoryNo)}</b></td><td>${esc(x.table)}</td><td>${result}</td></tr>`}).join('')}</tbody></table></div>
+    <div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" onclick="executeExcelImport()" ${(!newPeople.length&&!newInv.length)?'disabled':''}>☁️ დადასტურება და Supabase-ში იმპორტი</button><button class="btn" onclick="document.getElementById('excelImportPreview').innerHTML=''">გაუქმება</button></div>`;
+  }catch(e){box.innerHTML='<div class="inv-status inv-none">⚠️ '+esc(e.message)+'</div>';}
+}
+async function executeExcelImport(){
+  const plan=window.__excelImportPlan; if(!plan){await showExcelImportPreview();return;}
+  const newPeople=plan.personPlans.filter(x=>!x.existing&&!x.conflict), newInv=plan.invPlans.filter(x=>!x.existing&&!x.conflict&&!x.personConflict);
+  if(!confirm(`დადასტურება\n\nახალი პიროვნებები: ${newPeople.length}\nახალი ინვენტარი: ${newInv.length}\nპიროვნების კონფლიქტი: ${plan.personPlans.filter(x=>x.conflict).length}\nკატეგორიის კონფლიქტი: ${plan.invPlans.filter(x=>x.conflict).length}\n\nგსურთ მხოლოდ უსაფრთხო ჩანაწერების Supabase-ში დამატება?`))return;
+  const personIdByKey=new Map(); plan.personPlans.forEach(x=>{if(x.existing&&!x.conflict)personIdByKey.set(excelPersonKey(x.source),x.existing.id)});
+  let addedPeople=0,addedInv=0,skippedInv=0,failed=0,skippedConflicts=0;
+  setStatus('☁️ Excel მონაცემები Supabase-ში იტვირთება...');
+  for(const pp of plan.personPlans){
+    if(pp.existing||pp.conflict)continue;
+    const p=pp.source; if(!p.first&&!p.last)continue;
+    const payload={serial_no:p.serial?Number(p.serial):null,first_name:p.first||'',last_name:p.last||'',personal_id:p.personalId||null,room_no:p.room||null,floor:p.floor||null,mobile:p.phone||null,notes:`Excel იმპორტი: ${excelImportedMeta.fileName||''} • Excel N = პროგრამის რიგითი უნიკალური №`};
+    const ins=await sb.from('persons').insert(payload).select('id').single();
+    if(ins.error){failed++;continue} addedPeople++;personIdByKey.set(excelPersonKey(p),ins.data.id);
+  }
+  for(const x of plan.invPlans){
+    if(x.conflict||x.personConflict){skippedConflicts++;continue} if(x.existing){skippedInv++;continue}
+    const r=x.row; const pKey=excelPersonKey({serial:r.serial,personalId:r.personalId,full:r.personName,first:r.firstName,last:r.lastName}); const pid=personIdByKey.get(pKey)||null;
+    const payload={inventory_no:String(r.inventoryNo),person_id:pid};
+    const cfg=Object.values(configs).find(c=>c.table===x.table);
+    const nameField=cfg?.fields.find(f=>f[0]==='name'); if(nameField)payload.name=excelSafeName(r);
+    if(cfg?.fields.some(f=>f[0]==='room_no')&&r.room)payload.room_no=r.room;
+    if(cfg?.fields.some(f=>f[0]==='active'))payload.active=!r.cancelled;
+    if(cfg?.fields.some(f=>f[0]==='notes'))payload.notes=`Excel: ${r.sheet}, სტრიქონი ${r.row}, ველი ${r.inventoryField}${r.cancelled?' • ძველ მონაცემში მითითებულია ჩამოწერა/გაუქმება':''}`;
+    if(x.table==='internal_drives'||x.table==='external_drives')payload.drive_type=/ssd/i.test((r.inventoryField||'')+' '+(r.sourceValue||''))?'SSD':'HDD';
+    if(x.table==='other_inventory')payload.quantity=1;
+    const ins=await sb.from(x.table).insert(payload).select('id').single();
+    if(ins.error){failed++;continue} addedInv++;
+    if(pid)await logHistory(r.inventoryNo,x.table,null,pid,'Excel-დან იმპორტი და პასუხისმგებელ პირზე მიბმა');
+  }
+  await cacheAllTables();
+  setStatus(`🟢 იმპორტი დასრულდა • პიროვნებები +${addedPeople} • ინვენტარი +${addedInv} • არსებული ${skippedInv} • კონფლიქტი ${skippedConflicts} • შეცდომა ${failed}`,failed>0);
+  document.getElementById('excelImportPreview').innerHTML=`<div class="inv-status ${failed?'inv-used':'inv-free'}">${failed?'⚠️':'✅'} იმპორტი დასრულდა.<br>👤 ახალი პიროვნებები: <b>${addedPeople}</b><br>📦 ახალი ინვენტარი: <b>${addedInv}</b><br>⚪ უკვე არსებული ინვენტარი: <b>${skippedInv}</b><br>🔴 კონფლიქტის გამო გამოტოვებული: <b>${skippedConflicts}</b>${failed?'<br>❌ შეცდომით გამოტოვებული ჩანაწერები: <b>'+failed+'</b>':''}</div>`;
+  window.__excelImportPlan=null;
+}
+
+async function excelView(){
+  const saved=await loadExcelImport();
+  if(saved && (saved.rows?.length || saved.people?.length)){excelImportedRows=saved.rows||[];excelImportedPeople=saved.people||[];excelImportedMeta=saved.meta||excelImportedMeta}
+  section.innerHTML=`<div class="card">
+    <h2>📊 Excel მონაცემები</h2>
+    <div class="excel-drop">
+      <b>არსებული Excel ფაილის ჩატვირთვა</b>
+      <p class="hint">ფაილი მუშავდება ამ კომპიუტერში და შენახული იმპორტი შემდეგ გახსნაზეც ხელმისაწვდომი იქნება.</p><div class="hint" style="background:#eff6ff;border:1px solid #bfdbfe;padding:10px;border-radius:8px">🔑 <b>მნიშვნელოვანი წესი:</b> Excel-ის <b>N</b> და პროგრამის <b>რიგითი უნიკალური №</b> ერთი და იგივე უნიკალური ნომერია. იმპორტისას პიროვნების შესადარებლად პირველ რიგში სწორედ N გამოიყენება.</div>
+      <input type="file" accept=".xlsx,.xls,.xlsm" onchange="handleExcelUpload(this)">
+    </div>
+    <div id="excelInfo"></div>
+    <div class="card" style="margin-top:14px;border:1px solid #dcfce7;background:#f7fee7">
+      <div class="toolbar" style="margin-bottom:8px"><h3 style="margin-right:auto">🧩 Excel → HTML ველების დალაგება</h3><button class="btn btn-success" type="button" id="excelArrangeBtn" type="button">🧩 ველების დალაგება</button></div>
+      <div class="hint">Excel-ის ველები პროგრამაში ერთ სტანდარტულ ფორმატში გამოჩნდება: <b>N → რიგითი უნიკალური №</b> • <b>ID → პირადი ID</b> • <b>სახელი → სახელი *</b> • <b>გვარი → გვარი *</b> • <b>საკონტაქტო → მაქსიმუმ 4 ნომერი</b>. <b>Excel-ში 9-ნიშნა ნომერიც ავტომატურად ამოიცნობა.</b> Excel-ის თავდაპირველი მონაცემები არ იცვლება.</div>
+      <div id="excelArrangedFields" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:14px;border:1px solid #dbeafe;background:#f8fbff">
+      <h3>☁️ Excel → Supabase</h3>
+      <p class="hint">ჯერ შეამოწმე რას დაამატებს პროგრამა. არსებული ჩანაწერები არ გადაიწერება. ახალი პიროვნებები და ინვენტარი დაემატება მხოლოდ შენი დადასტურების შემდეგ.</p>
+      <button class="btn btn-primary" onclick="showExcelImportPreview()">🔎 იმპორტის წინასწარი შემოწმება</button>
+      <div id="excelImportPreview" style="margin-top:12px"></div>
+    </div>
+    <div class="toolbar"><h3 style="margin-right:auto">🔎 Excel-ში საინვენტარო ნომრის ან პიროვნების ძებნა</h3><input id="excelSearch" class="search" placeholder="№, სახელი, გვარი, პირადი ID..." oninput="runExcelSearch()"></div>
+    <div id="excelResults"></div>
+  </div>`;
+  renderExcelInfo();
+  const arrangeBtn=document.getElementById('excelArrangeBtn');
+  if(arrangeBtn){
+    arrangeBtn.addEventListener('click',()=>excelArrangeFields());
+  }
+}
+function excelParseContacts(value){
+  const s=excelClean(value); if(!s)return [];
+  const found=[];
+  const add=(raw)=>{
+    let x=excelClean(raw).replace(/[^0-9+]/g,'');
+    if(!x)return;
+    if(x.startsWith('+995')) x=x.slice(4);
+    else if(x.startsWith('995') && x.length>=12) x=x.slice(3);
+    if(x.startsWith('0') && x.length===10) x=x.slice(1);
+    // ქართული მობილური: 5XXXXXXXX, ქალაქის: 32XXXXXXX
+    if(/^5\d{8}$/.test(x) || /^32\d{7}$/.test(x)){
+      const normalized='0'+x;
+      if(!found.includes(normalized))found.push(normalized);
+    }
+  };
+  // ვპოულობთ როგორც +995 5xx xx xx xx / 0 5xx xx xx xx, ისე Excel-ში
+  // რიცხვით შენახულ 9-ნიშნა ნომერს (მაგ. 595889500).
+  const chunks=s.split(/[;,/|\n]+/).map(excelClean).filter(Boolean);
+  chunks.forEach(chunk=>{
+    const compact=chunk.replace(/[^0-9+]/g,'');
+    if(/^\+?9955\d{8}$/.test(compact)||/^99532\d{7}$/.test(compact)||/^0(?:5\d{8}|32\d{7})$/.test(compact)||/^(?:5\d{8}|32\d{7})$/.test(compact)){
+      add(compact);
+      return;
+    }
+    const phoneRx=/(?:\+?995\s*|0\s*)?(?:5\d{2}|32)\s*\d{2}\s*\d{2}\s*\d{2}/g;
+    let m;
+    while((m=phoneRx.exec(chunk))!==null){ add(m[0]); if(found.length>=4)break; }
+  });
+  // თუ ნომერი სხვა ტექსტთან ერთადაა, მაინც ამოვიღოთ 9-ნიშნა ქართული ნომერი.
+  if(found.length<4){
+    const digits=s.replace(/\D/g,' ');
+    const phone9Rx=/(?:995)?(5\d{8}|32\d{7})/g; let m;
+    while((m=phone9Rx.exec(digits))!==null){ add(m[0]); if(found.length>=4)break; }
+  }
+  return found.slice(0,4);
+}
+async function excelArrangeFields(){
+  const box=document.getElementById('excelArrangedFields');
+  if(!box)return;
+  try{
+  // ყოველთვის ავიღოთ უახლესი შენახული Excel მონაცემები — განსაკუთრებით მაშინ,
+  // როცა გვერდი თავიდან გაიხსნა და მხოლოდ IndexedDB-შია მონაცემები.
+  const saved=await loadExcelImport();
+  if(saved && (saved.rows?.length || saved.people?.length)){
+    excelImportedRows=saved.rows||[];
+    excelImportedPeople=saved.people||[];
+    excelImportedMeta=saved.meta||excelImportedMeta;
+  }
+  if(!excelImportedPeople.length){box.innerHTML='<div class="status">ჯერ Excel არ არის ჩატვირთული. აირჩიე Excel ფაილი ზემოთ და შემდეგ დააჭირე „🧩 ველების დალაგება“.</div>';return;}
+  const rows=excelImportedPeople.map((p,i)=>{
+    const contacts=(Array.isArray(p.contacts)&&p.contacts.length?p.contacts:excelParseContacts(p.phone)).slice(0,4);
+    return {idx:i,n:excelSerialKey(p.serial),id:p.personalId||'',first:p.first||'',last:p.last||'',contacts};
+  });
+  window.__excelArrangedRows=rows;
+  box.innerHTML=`<div class="hint" style="margin-bottom:8px">🟢 დალაგებულია ${rows.length} პიროვნება. მონიშნე სასურველი პიროვნება და გამოიყენე <b>👤 ფორმაში გადატანა</b>, ან რამდენიმე პიროვნება ერთად დაამატე პროგრამაში. Excel-ის ფაილი და საწყისი მონაცემები არ იცვლება.</div>
+    <div class="toolbar" style="margin-bottom:8px"><button class="btn btn-success" type="button" onclick="addSelectedExcelPeopleToForm()">➕ მონიშნული პირების ერთდროულად დამატება</button><button class="btn btn-secondary" type="button" onclick="selectAllExcelPeople(true)">☑️ ყველას მონიშვნა</button><button class="btn btn-secondary" type="button" onclick="selectAllExcelPeople(false)">☐ მონიშვნის მოხსნა</button><span id="excelSelectionStatus" class="hint" style="margin-left:auto">მონიშნულია: 0</span><span id="excelBatchStatus" class="hint"></span></div>
+    <div class="table-wrap"><table><thead><tr><th>არჩევა</th><th>მოქმედება</th><th>რიგითი უნიკალური №</th><th>პირადი ID</th><th>სახელი *</th><th>გვარი *</th><th>საკონტაქტო №1</th><th>№2</th><th>№3</th><th>№4</th></tr></thead><tbody>${rows.map(r=>`<tr><td><input type="checkbox" class="excel-person-check" data-excel-idx="${r.idx}" onchange="updateExcelSelectionStatus()"></td><td><button class="btn btn-primary" type="button" onclick="transferExcelPersonToForm(${r.idx})">👤 ფორმაში გადატანა</button></td><td><b>${esc(r.n||'—')}</b></td><td>${esc(r.id||'—')}</td><td>${esc(r.first||'—')}</td><td>${esc(r.last||'—')}</td>${[0,1,2,3].map(i=>`<td>${esc(r.contacts[i]||'—')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  updateExcelSelectionStatus();
+  }catch(err){
+    console.error('excelArrangeFields error:',err);
+    box.innerHTML='<div class="status" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">❌ ველების დალაგება ვერ შესრულდა: '+esc(err?.message||String(err))+'</div>';
+  }
+}
+function updateExcelSelectionStatus(){
+  const checks=[...document.querySelectorAll('.excel-person-check')];
+  const n=checks.filter(x=>x.checked).length;
+  const el=document.getElementById('excelSelectionStatus');
+  if(el)el.textContent='მონიშნულია: '+n;
+}
+function selectAllExcelPeople(flag){
+  document.querySelectorAll('.excel-person-check').forEach(x=>x.checked=!!flag);
+  updateExcelSelectionStatus();
+}
+function transferExcelPersonToForm(idx){
+  const rows=window.__excelArrangedRows||[];
+  const r=rows[Number(idx)];
+  if(!r){alert('❌ Excel-ის ჩანაწერი ვერ მოიძებნა. თავიდან დააჭირე „🧩 ველების დალაგებას“.');return;}
+  const contacts=Array.isArray(r.contacts)?r.contacts.slice(0,4):excelParseContacts(r.phone||'');
+  const serial=String(r.n||'').trim();
+  if(!serial){alert('❌ ამ ჩანაწერს რიგითი უნიკალური № (N) არ აქვს.');return;}
+  if(!String(r.first||'').trim()||!String(r.last||'').trim()){
+    if(!confirm('⚠️ Excel ჩანაწერს სახელი ან გვარი აკლია. მაინც გადავიტანოთ ფორმაში?'))return;
+  }
+  openPersonForm({
+    serial_no:serial,
+    first_name:r.first||'',
+    last_name:r.last||'',
+    personal_id:r.id||'',
+    mobile:contacts.join(' / '),
+    position:'',
+    room_no:'',
+    floor:'',
+    work_phone:'',
+    ip_address:'',
+    mac_address:'',
+    notes:`Excel-დან გადმოტანილია • ${excelImportedMeta?.fileName||''}`,
+    employed:true
+  });
+  setTimeout(()=>{
+    const status=document.getElementById('p_serial_status');
+    if(status)status.innerHTML='<span style="color:#2563eb">📊 Excel-დან ავტომატურად გადმოტანილია. გადაამოწმე მონაცემები და დააჭირე „💾 შენახვა“.</span>';
+    document.getElementById('p_first')?.focus();
+  },50);
+}
+
+async function addSelectedExcelPeopleToForm(){
+  const checks=[...document.querySelectorAll('.excel-person-check:checked')];
+  if(!checks.length){alert('ჯერ მონიშნე Excel-იდან ერთი ან რამდენიმე პიროვნება.');return;}
+  const saved=await loadExcelImport();
+  if(saved?.people?.length){excelImportedPeople=saved.people;excelImportedRows=saved.rows||excelImportedRows;excelImportedMeta=saved.meta||excelImportedMeta}
+  const selected=checks.map(ch=>excelImportedPeople[Number(ch.dataset.excelIdx)]).filter(Boolean);
+  const existing=new Set();
+  // ხელახლა გადავამოწმოთ პირდაპირ Supabase-ში, რათა ძველი cache-ის გამო დუბლიკატი არ დაემატოს.
+  const {data:live,error:liveErr}=await db.from('persons').select('serial_no');
+  if(liveErr){alert('❌ არსებული N-ების შემოწმება ვერ მოხერხდა: '+liveErr.message);return}
+  (live||[]).forEach(x=>{if(x.serial_no!==null&&x.serial_no!==undefined)existing.add(String(x.serial_no).trim())});
+  const unique=[]; const seen=new Set(); const skipped=[]; const invalid=[];
+  selected.forEach(p=>{
+    const n=String(p.serial||p.n||'').trim();
+    if(!n){invalid.push(p);return}
+    if(existing.has(n)||seen.has(n)){skipped.push(n);return}
+    seen.add(n); unique.push(p);
+  });
+  if(invalid.length) alert(`⚠️ ${invalid.length} მონიშნულ ჩანაწერს N / რიგითი უნიკალური № არ აქვს და გამოტოვდება.`);
+  if(!unique.length){alert(`ℹ️ დასამატებელი ახალი პიროვნება ვერ მოიძებნა.\n\nუკვე არსებული/დუბლიკატი N: ${skipped.length}`);return;}
+  if(!confirm(`მონიშნულია: ${selected.length}\n\nდასამატებელი ახალი პირები: ${unique.length}\nუკვე არსებული/დუბლიკატი N: ${skipped.length}\n\nდავამატოთ ყველა ახალი პიროვნება ერთდროულად პროგრამაში?`))return;
+  let added=0, failed=0, failedDetails=[];
+  for(const p of unique){
+    const n=Number(String(p.serial||p.n||'').trim());
+    const contacts=(Array.isArray(p.contacts)&&p.contacts.length?p.contacts:excelParseContacts(p.phone)).filter(Boolean).slice(0,4);
+    const payload={
+      serial_no:n,
+      first_name:String(p.first||'').trim(),
+      last_name:String(p.last||'').trim(),
+      personal_id:String(p.personalId||'').trim()||null,
+      mobile:contacts.join(' / ')||null,
+      room_no:String(p.room||'').trim()||null,
+      floor:p.floor!==undefined&&p.floor!==null&&String(p.floor).trim()!==''?Number(p.floor):null,
+      position:null, work_phone:null, ip_address:null, mac_address:null,
+      notes:`Excel-დან დამატებულია • ${excelImportedMeta.fileName||''}`,
+      employed:true
+    };
+    // საბოლოო დაცვა: თუ ამ N-ს უკვე სხვა მომხმარებელი დაამატებს, ეს ჩანაწერი გამოტოვდეს.
+    const check=await db.from('persons').select('id').eq('serial_no',n).limit(1);
+    if(check.error){failed++;failedDetails.push(`${n}: ${check.error.message}`);continue}
+    if(check.data?.length){skipped.push(String(n));continue}
+    const ins=await db.from('persons').insert(payload).select('id').single();
+    if(ins.error){failed++;failedDetails.push(`${n}: ${ins.error.message}`);}
+    else added++;
+  }
+  await personsView();
+  const detail=failedDetails.length?`\n\n❌ შეცდომით ვერ დაემატა: ${failed}\n${failedDetails.slice(0,10).join('\n')}${failedDetails.length>10?'\n...':''}`:'';
+  alert(`✅ ოპერაცია დასრულდა!\n\nდაემატა: ${added}\nგამოტოვდა, რადგან N უკვე არსებობდა: ${skipped.length}\nშეცდომა: ${failed}${detail}`);
+}
+
+async function addSelectedExcelPersonToForm(){
+  return addSelectedExcelPeopleToForm();
+}
+
+function renderExcelInfo(){
+  const info=document.getElementById('excelInfo'), res=document.getElementById('excelResults'); if(!info)return;
+  if(!excelImportedRows.length){
+    info.innerHTML='<div class="status">ჯერ არ არის ჩატვირთული Excel. აირჩიე ფაილი ზემოთ.</div>';
+    if(res)res.innerHTML=''; return;
+  }
+  info.innerHTML=`<div class="excel-summary"><div class="excel-stat"><b>${excelImportedMeta.sheets||'—'}</b>ფურცელი</div><div class="excel-stat"><b>${excelImportedMeta.people||'—'}</b>პიროვნება</div><div class="excel-stat"><b>${excelImportedMeta.inventoryRefs||excelImportedRows.length}</b>ინვენტარის კავშირი</div><div class="excel-stat"><b>${esc(excelImportedMeta.fileName||'Excel')}</b>ფაილი</div></div>
+  <div class="hint">იმპორტი შესრულებულია: ${excelImportedMeta.loadedAt?new Date(excelImportedMeta.loadedAt).toLocaleString('ka-GE'):'—'}</div>`;
+  runExcelSearch();
+}
+function runExcelSearch(){
+  const box=document.getElementById('excelResults'); if(!box)return;
+  const q=excelClean(document.getElementById('excelSearch')?.value).toLowerCase();
+  if(!q){box.innerHTML='<div class="status">ჩაწერე საინვენტარო ნომერი ან პიროვნების სახელი/გვარი.</div>';return}
+  const matches=excelImportedRows.filter(r=>{
+    const hay=[r.inventoryNo,r.personName,r.firstName,r.lastName,r.personalId,r.phone,r.room,r.serial,r.inventoryField,r.sourceValue,r.sheet].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  if(!matches.length){box.innerHTML='<div class="inv-status inv-none">⚪ Excel-ში ასეთი მონაცემი ვერ მოიძებნა.</div>';return}
+  // Group identical inventory numbers so one inventory number immediately shows its owner(s).
+  const groups=new Map();
+  matches.forEach(r=>{const k=r.inventoryNo||('row-'+r.sheet+'-'+r.row);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});
+  box.innerHTML=[...groups.entries()].map(([inv,arr])=>{
+    const owners=[...new Set(arr.map(x=>x.personName).filter(Boolean))];
+    const ownerText=owners.length?owners.join(', '):'პიროვნება Excel-ში მითითებული არ არის';
+    const first=arr[0];
+    return `<div class="excel-owner"><div><b>📦 საინვენტარო № ${esc(inv)}</b></div>
+      <div style="margin-top:6px"><b>👤 პასუხისმგებელი პირი:</b> ${esc(ownerText)}</div>
+      <div class="hint">ფურცელი: ${esc(first.sheet)} • სტრიქონი: ${esc(first.row)} • ველი: ${esc(first.inventoryField||'')}</div>
+      ${arr.map(x=>`<div class="hint">მონაცემი: ${esc(x.sourceValue||'')} ${x.personalId?'• პირადი ID: '+esc(x.personalId):''} ${x.room?'• '+esc(x.room):''}</div>`).join('')}
+    </div>`;
+  }).join('');
+}
+async function preloadExcelImport(){
+  const saved=await loadExcelImport();
+  if(saved && (saved.rows?.length || saved.people?.length)){excelImportedRows=saved.rows||[];excelImportedPeople=saved.people||[];excelImportedMeta=saved.meta||excelImportedMeta}
+}
+
+async function globalSearchView(){section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">🔎 საინვენტარო ნომრის ძებნა</h2><select id="globalSource" style="max-width:230px"><option value="both">🟪 ორივე ერთად</option><option value="system">☁️ ძირითადი სისტემა</option><option value="excel">📊 Excel</option></select><input id="globalInv" class="search" placeholder="შეიყვანე საინვენტარო №"><select id="globalStatus" style="max-width:220px"><option value="all">ყველა</option><option value="free">🟡 თავისუფალი</option><option value="used">🟢 გამოყენებაში</option><option value="written">🔴 ჩამოწერილი</option></select><button class="btn btn-primary" onclick="runGlobalSearch()">ძებნა</button></div><div class="hint" style="margin-top:8px">შეგიძლია აირჩიო: ძირითადი სისტემა, Excel, ან ორივე ერთად.</div><div id="globalResults"></div></div>`;globalInv.focus()}
+async function runGlobalSearch(){const q=globalInv.value.trim().toLowerCase();const source=globalSource.value;if(!q){globalResults.innerHTML='<div class="status">შეიყვანე საინვენტარო ნომერი.</div>';return}let rows=[];
+if(source==='system'||source==='both'){for(const x of inventoryTables){const {data,error}=await db.from(x.table).select('*');if(error)continue;for(const r of (data||[])){if(String(r.inventory_no||'').toLowerCase().includes(q))rows.push({...r,_source:'system',_type:x.type,_table:x.table,_name:r[x.nameField]||r.model||''})}}const {data:wo}=await db.from('inventory_writeoffs').select('*');for(const r of (wo||[])){if(String(r.inventory_no||'').toLowerCase().includes(q))rows.push({...r,_source:'system',_type:'📕 ჩამოწერილი',_written:true,_name:r.object_name||''})}}
+if(source==='excel'||source==='both'){const saved=await loadExcelImport();if(saved && (saved.rows?.length || saved.people?.length)){excelImportedRows=saved.rows||[];excelImportedPeople=saved.people||[];excelImportedMeta=saved.meta||excelImportedMeta}const em=excelImportedRows.filter(r=>String(r.inventoryNo||'').toLowerCase().includes(q));em.forEach(r=>rows.push({_source:'excel',_type:'📊 Excel',inventory_no:r.inventoryNo,_name:r.sourceValue||r.inventoryField||'',_excelPerson:r.personName||'',_excelId:r.personalId||'',_excelRoom:r.room||'',_excelFloor:r.floor||'',_excelSheet:r.sheet,_excelRow:r.row,_excelField:r.inventoryField}))}
+const filtered=rows.filter(r=>{if(r._source==='excel')return globalStatus.value==='all';const st=r._written?'written':r.person_id?'used':'free';return globalStatus.value==='all'||globalStatus.value===st});if(!filtered.length){globalResults.innerHTML='<div class="inv-status inv-none">⚪ ასეთი ნომერი არჩეულ წყაროში არ მოიძებნა.</div>';return}
+const people={};const ids=filtered.map(r=>r.person_id).filter(Boolean);if(ids.length){const {data:ps}=await db.from('persons').select('id,first_name,last_name').in('id',ids);(ps||[]).forEach(p=>people[p.id]=p.first_name+' '+p.last_name)}
+globalResults.innerHTML=`<div class="table-wrap"><table><thead><tr><th>წყარო</th><th>სტატუსი</th><th>ტიპი</th><th>№</th><th>ობიექტი</th><th>პასუხისმგებელი</th><th>დამატებითი ინფორმაცია</th></tr></thead><tbody>${filtered.map(r=>{if(r._source==='excel'){return `<tr><td>📊 Excel</td><td>📊 იმპორტირებული</td><td>${esc(r._type)}</td><td><b>${esc(r.inventory_no)}</b></td><td>${esc(r._name)}</td><td><b>${esc(r._excelPerson||'პასუხისმგებელი Excel-ში მითითებული არ არის')}</b></td><td>ფურცელი: ${esc(r._excelSheet||'—')} • სტრიქონი: ${esc(r._excelRow||'—')}${r._excelId?' • პირადი ID: '+esc(r._excelId):''}${r._excelRoom?' • ოთახი: '+esc(r._excelRoom):''}${r._excelFloor?' • სართული: '+esc(r._excelFloor):''}</td></tr>`}const st=r._written?'written':r.person_id?'used':'free';return `<tr><td>☁️ სისტემა</td><td>${st==='free'?'🟡 თავისუფალი':st==='used'?'🟢 გამოყენებაში':'🔴 ჩამოწერილი'}</td><td>${esc(r._type)}</td><td><b>${esc(r.inventory_no)}</b></td><td>${esc(r._name)}</td><td>${esc(people[r.person_id]||r.person_id||'—')}</td><td>${st==='free'?'<span class="badge">თავისუფალია — შესაძლებელია მიბმა</span>':st==='used'?'<span class="badge">გადაცემა შესაძლებელია თანხმობით</span>':'<span class="badge">ჩამოწერილია</span>'}</td></tr>`}).join('')}</tbody></table></div>`}
+
+async function getPersonAll(pid){const results=await Promise.all(inventoryTables.map(async x=>{const {data}=await db.from(x.table).select('*').eq('person_id',pid);return (data||[]).map(r=>({...r,_type:x.type,_name:r[x.nameField]||r.model||''}))}));return results.flat()}
 async function printPerson(pid){const {data:p}=await db.from('persons').select('*').eq('id',pid).single();if(!p)return;const inv=await getPersonAll(pid);const w=window.open('','_blank');w.document.write(`<html><head><meta charset="UTF-8"><title>ინვენტარი — ${esc(p.first_name)} ${esc(p.last_name)}</title><style>body{font-family:Arial,sans-serif;padding:30px}h2{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:7px;text-align:left}th{background:#eee}.info{margin-bottom:18px;line-height:1.8}</style></head><body><h2>პიროვნებაზე მიბმული საინვენტარო სია</h2><div class="info"><b>სახელი გვარი:</b> ${esc(p.first_name)} ${esc(p.last_name)}<br><b>პირადი ID:</b> ${esc(p.personal_id)}<br><b>თანამდებობა:</b> ${esc(p.position)}<br><b>კაბინეტი:</b> ${esc(p.room_no)}<br><b>სართული:</b> ${esc(p.floor)}<br><b>კონტაქტები:</b> ${esc(p.mobile)}<br><b>შიდა ნომერი:</b> ${esc(p.work_phone)}</div><table><tr><th>#</th><th>ტიპი</th><th>საინვენტარო №</th><th>დასახელება</th></tr>${inv.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r._type)}</td><td>${esc(r.inventory_no)}</td><td>${esc(r._name)}</td></tr>`).join('')}</table><p style="margin-top:30px">თარიღი: ${new Date().toLocaleDateString('ka-GE')}</p><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close()}
 async function printAct(pid){const {data:p}=await db.from('persons').select('*').eq('id',pid).single();if(!p)return;const inv=await getPersonAll(pid);const w=window.open('','_blank');w.document.write(`<html><head><meta charset="UTF-8"><title>მიღება-ჩაბარების აქტი</title><style>body{font-family:Arial,sans-serif;padding:35px}h2{text-align:center}p{line-height:1.7}table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #555;padding:7px}.sign{display:flex;justify-content:space-between;margin-top:70px}</style></head><body><h2>მიღება-ჩაბარების აქტი</h2><p>წინამდებარე აქტით დასტურდება, რომ საინვენტარო ობიექტები გადაეცა პასუხისმგებელ პირს:</p><p><b>პირი:</b> ${esc(p.first_name)} ${esc(p.last_name)}<br><b>პირადი ID:</b> ${esc(p.personal_id)}<br><b>თანამდებობა:</b> ${esc(p.position)}<br><b>კაბინეტი:</b> ${esc(p.room_no)}<br><b>სართული:</b> ${esc(p.floor)}</p><table><tr><th>#</th><th>ტიპი</th><th>საინვენტარო №</th><th>დასახელება</th></tr>${inv.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r._type)}</td><td>${esc(r.inventory_no)}</td><td>${esc(r._name)}</td></tr>`).join('')}</table><p>პასუხისმგებელი პირი ადასტურებს, რომ აღნიშნული ინვენტარი ჩაიბარა და პასუხისმგებლობას იღებს მის შენახვასა და გამოყენებაზე.</p><div class="sign"><div>გადამცემი: __________________</div><div>მიმღები: __________________</div></div><p style="margin-top:30px">თარიღი: ${new Date().toLocaleDateString('ka-GE')}</p><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close()}
-function closeModal(){modal.classList.remove('show');recordForm.onsubmit=null}window.addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});init();
+function closeModal(){modal.classList.remove('show');recordForm.onsubmit=null}preloadExcelImport();window.addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});init();
 </script></body></html>
