@@ -72,10 +72,10 @@ async function idbDeleteQueue(qid){const d=await idbOpen();return new Promise((r
 
 function localUuid(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==="x"?r:(r&3|8);return v.toString(16)})}
 function clone(x){return JSON.parse(JSON.stringify(x))}
-function applyLocal(q,rows){let a=rows.slice();for(const f of q.filters){if(f.kind==="eq")a=a.filter(r=>String(r[f.col]??"")===String(f.val??""));else if(f.kind==="in")a=a.filter(r=>f.vals.includes(r[f.col]));else if(f.kind==="or")a=a.filter(r=>f.parts.some(p=>{const m=p.match(/^(\w+)\.ilike\.%(.+)%$/);return m&&String(r[m[1]]??"").toLowerCase().includes(m[2].toLowerCase())}));else if(f.kind==="not"&&f.op==="is"&&f.val===null)a=a.filter(r=>r[f.col]!==null&&r[f.col]!==undefined)}if(q.orderCol)a.sort((x,y)=>{const av=x[q.orderCol],bv=y[q.orderCol];if(av==bv)return 0;const z=av>bv?1:-1;return q.orderAsc?z:-z});if(q.limitN!=null)a=a.slice(0,q.limitN);if(q.columns&&q.columns!=="*"){const cols=q.columns.split(",").map(x=>x.trim());a=a.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]);return o})}return a}
+function applyLocal(q,rows){let a=rows.slice();for(const f of q.filters){if(f.kind==="eq")a=a.filter(r=>String(r[f.col]??"")===String(f.val??""));else if(f.kind==="in")a=a.filter(r=>f.vals.includes(r[f.col]));else if(f.kind==="or")a=a.filter(r=>f.parts.some(p=>{const m=p.match(/^(\w+)\.ilike\.%(.+)%$/);return m&&String(r[m[1]]??"").toLowerCase().includes(m[2].toLowerCase())}));else if(f.kind==="not"&&f.op==="is"&&f.val===null)a=a.filter(r=>r[f.col]!==null&&r[f.col]!==undefined)}if(q.orderCol)a.sort((x,y)=>{const av=x[q.orderCol],bv=y[q.orderCol];if(av==bv)return 0;const z=av>bv?1:-1;return q.orderAsc?z:-z});if(q.rangeFrom!=null)a=a.slice(q.rangeFrom,q.rangeTo==null?undefined:q.rangeTo+1);if(q.limitN!=null)a=a.slice(0,q.limitN);if(q.columns&&q.columns!=="*"){const cols=q.columns.split(",").map(x=>x.trim());a=a.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]);return o})}return a}
 
-class LocalQuery{constructor(table){this.table=table;this.op="select";this.payload=null;this.filters=[];this.orderCol=null;this.orderAsc=true;this.limitN=null;this.columns="*";this.wantSingle=false}
- select(c="*"){this.columns=c;if(this.op==="select")this.op="select";return this} eq(c,v){this.filters.push({kind:"eq",col:c,val:v});return this} in(c,v){this.filters.push({kind:"in",col:c,vals:v});return this} or(x){this.filters.push({kind:"or",parts:x.split(",")});return this} not(c,o,v){this.filters.push({kind:"not",col:c,op:o,val:v});return this} order(c,o={}){this.orderCol=c;this.orderAsc=o.ascending!==false;return this} limit(n){this.limitN=n;return this} single(){this.wantSingle=true;return this} maybeSingle(){this.wantSingle=true;return this}
+class LocalQuery{constructor(table){this.table=table;this.op="select";this.payload=null;this.filters=[];this.orderCol=null;this.orderAsc=true;this.limitN=null;this.rangeFrom=null;this.rangeTo=null;this.columns="*";this.wantSingle=false}
+ select(c="*"){this.columns=c;if(this.op==="select")this.op="select";return this} eq(c,v){this.filters.push({kind:"eq",col:c,val:v});return this} in(c,v){this.filters.push({kind:"in",col:c,vals:v});return this} or(x){this.filters.push({kind:"or",parts:x.split(",")});return this} not(c,o,v){this.filters.push({kind:"not",col:c,op:o,val:v});return this} order(c,o={}){this.orderCol=c;this.orderAsc=o.ascending!==false;return this} limit(n){this.limitN=n;return this} range(from,to){this.rangeFrom=Number(from)||0;this.rangeTo=Number(to);return this} single(){this.wantSingle=true;return this} maybeSingle(){this.wantSingle=true;return this}
  insert(payload){this.op="insert";this.payload=Array.isArray(payload)?payload.map(clone):[clone(payload)];return this} update(payload){this.op="update";this.payload=clone(payload);return this} delete(){this.op="delete";return this}
  async exec(){let rows=await idbGetTable(this.table);if(this.op==="select"){const out=applyLocal(this,rows);if(this.wantSingle)return {data:out[0]||null,error:out[0]?null:{message:"No rows found"}};return {data:out,error:null}}
  if(this.op==="insert"){const added=this.payload.map(r=>{const x=clone(r);if(x.id==null)x.id=localUuid();if(x.created_at==null)x.created_at=new Date().toISOString();if(x.updated_at==null)x.updated_at=new Date().toISOString();return x});rows.push(...added);await idbSetTable(this.table,rows);await idbQueue({action:"insert",table:this.table,rows:added});return {data:added.length===1?added[0]:added,error:null}}
@@ -84,7 +84,7 @@ class LocalQuery{constructor(table){this.table=table;this.op="select";this.paylo
  if(this.op==="delete"){rows=rows.filter(r=>!matched.some(m=>m.id===r.id));await idbSetTable(this.table,rows);await idbQueue({action:"delete",table:this.table,filters:this.filters});return {data:null,error:null}}}
  then(a,b){return this.exec().then(a,b)} catch(a){return this.exec().catch(a)} finally(a){return this.exec().finally(a)}}
 
-class OnlineQuery{constructor(real,table){this.real=real.from(table);this.table=table} select(c="*"){this.real=this.real.select(c);return this} eq(c,v){this.real=this.real.eq(c,v);return this} in(c,v){this.real=this.real.in(c,v);return this} or(x){this.real=this.real.or(x);return this} not(c,o,v){this.real=this.real.not(c,o,v);return this} order(c,o){this.real=this.real.order(c,o);return this} limit(n){this.real=this.real.limit(n);return this} single(){this.real=this.real.single();return this} maybeSingle(){this.real=this.real.maybeSingle();return this} insert(p){this.real=this.real.insert(p);return this} update(p){this.real=this.real.update(p);return this} delete(){this.real=this.real.delete();return this} then(a,b){return this.real.then(async r=>{if(r&&r.error==null)await cacheTable(this.table);return a?r&&a(r):r},b)} catch(a){return this.real.catch(a)} finally(a){return this.real.finally(a)}}
+class OnlineQuery{constructor(real,table){this.real=real.from(table);this.table=table} select(c="*"){this.real=this.real.select(c);return this} eq(c,v){this.real=this.real.eq(c,v);return this} in(c,v){this.real=this.real.in(c,v);return this} or(x){this.real=this.real.or(x);return this} not(c,o,v){this.real=this.real.not(c,o,v);return this} order(c,o){this.real=this.real.order(c,o);return this} limit(n){this.real=this.real.limit(n);return this} range(from,to){this.real=this.real.range(from,to);return this} single(){this.real=this.real.single();return this} maybeSingle(){this.real=this.real.maybeSingle();return this} insert(p){this.real=this.real.insert(p);return this} update(p){this.real=this.real.update(p);return this} delete(){this.real=this.real.delete();return this} then(a,b){return this.real.then(async r=>{if(r&&r.error==null)await cacheTable(this.table);return a?r&&a(r):r},b)} catch(a){return this.real.catch(a)} finally(a){return this.real.finally(a)}}
 
 const dbFacade={from(table){return offlineMode?new LocalQuery(table):new OnlineQuery(sb,table)}};
 db=dbFacade;
@@ -1769,12 +1769,19 @@ async function prepareSetIndicatorsForMixedRows(rows){
   for(const [table,rs] of Object.entries(groups))await prepareSetIndicators(table,rs);
 }
 async function setGetPeople(){
-  if(__setPeopleCache.size)return Array.from(__setPeopleCache.values());
-  const q=await db.from('persons').select('id,first_name,last_name,serial_no,personal_id,room_no,floor,mobile,position,employed').order('first_name',{ascending:true});
-  if(q.error)throw new Error(q.error.message);
+  /* პასუხისმგებლის არჩევისას არასოდეს გამოვიყენოთ მხოლოდ ნაწილობრივი cache.
+     cache-ში შეიძლება ადრე მხოლოდ 4/რამდენიმე ადამიანი იყოს ჩატვირთული. */
+  const all=[]; const pageSize=1000; let from=0;
+  while(true){
+    const q=await db.from('persons').select('id,first_name,last_name,serial_no,personal_id,room_no,floor,mobile,position,employed').order('first_name',{ascending:true}).range(from,from+pageSize-1);
+    if(q.error)throw new Error(q.error.message);
+    const page=q.data||[]; all.push(...page);
+    if(page.length<pageSize)break;
+    from+=pageSize;
+  }
   __setPeopleCache.clear();
-  (q.data||[]).forEach(p=>__setPeopleCache.set(String(p.id),p));
-  return q.data||[];
+  all.forEach(p=>__setPeopleCache.set(String(p.id),p));
+  return all;
 }
 async function setGetInventory(table,invNo){
   const cfg=setCfg(table);if(!cfg)return null;
@@ -2202,6 +2209,7 @@ async function chooseLinkResponsible(sourceInv,selected){
 }
 
 async function confirmInventoryLinks(){
+  let createdTransferSetId=null;
   if(!__invLinkSource||!__invLinkSelected.size){alert('❌ ჯერ მონიშნე მინიმუმ ერთი საინვენტარო ნომერი.');return}
   try{
     const source=__invLinkSource.inv;
@@ -2234,6 +2242,27 @@ async function confirmInventoryLinks(){
       if(!confirm(`⚠️ მონიშნულიდან ზოგი ინვენტარი უკვე სხვა კომპლექტშია:\n\n${list}\n\nგინდა მათი ამ კომპლექტში გადატანა?\n\nძველი კომპლექტიდან მხოლოდ კავშირი მოიხსნება. ინვენტარის „ვისთან დგას“ მონაცემი არ შეიცვლება.`))return;
     }
 
+    /*
+       ძალიან მნიშვნელოვანი: inventory_set_items-ში (inventory_table, inventory_id)
+       უნიკალურია. ამიტომ უკვე სხვა კომპლექტში მყოფი ნივთის პირდაპირ ხელახლა
+       INSERT-მა შეიძლება გამოიწვიოს duplicate key. გადატანის შემთხვევაში ძველი
+       კავშირები ჯერ მოიხსნება და საჭიროებისას შეცდომისას უკან აღდგება.
+    */
+    const removedSetItems=[];
+    async function removeOldMembershipsForTransfer(){
+      if(!existingSets.length)return;
+      for(const x of existingSets){
+        const d=await db.from('inventory_set_items').delete().eq('id',x.itemId);
+        if(d.error)throw new Error(`№ ${x.r.inventory_no}-ის ძველი კომპლექტიდან გამოყოფა ვერ მოხერხდა: ${d.error.message}`);
+        removedSetItems.push({id:x.itemId,set_id:x.set.id,inventory_table:x.r._table,inventory_id:x.r.id,inventory_no:String(x.r.inventory_no),actual_user_id:x.r.person_id||null,state:'normal'});
+      }
+    }
+    async function restoreRemovedMemberships(){
+      for(const x of removedSetItems){
+        try{await db.from('inventory_set_items').insert(x)}catch(e){console.warn('ძველი კომპლექტის წევრის აღდგენა:',e)}
+      }
+    }
+
     let targetSet=srcSet;
     if(!targetSet){
       /* ბუღალტრული პასუხისმგებელი ამ ეტაპზე სავალდებულო აღარ არის.
@@ -2260,6 +2289,8 @@ async function confirmInventoryLinks(){
       }).select('*').single();
       if(ins.error)throw new Error(ins.error.message);
       targetSet=ins.data;
+      createdTransferSetId=targetSet.id;
+      await removeOldMembershipsForTransfer();
 
       /* ძალიან მნიშვნელოვანი: inventory.person_id არ იცვლება.
          ის რჩება კონკრეტული ნომრის ფაქტობრივ მომხმარებლად.
@@ -2293,7 +2324,13 @@ async function confirmInventoryLinks(){
     if(!toAdd.length){alert('ℹ️ მონიშნული ინვენტარი უკვე ამ კომპლექტშია.');return}
     if(!confirm(`კომპლექტი: ${targetSet.set_no}\nბუღალტრული პასუხისმგებელი: ${setPersonName(rp.data)}\n\nდაემატება:\n${toAdd.map(x=>'№ '+x.inventory_no+' • '+x._type).join('\n')}\n\nინვენტარის მიმდინარე მომხმარებლები უცვლელი დარჩება.\n\nდავამატოთ?`))return;
 
+    await removeOldMembershipsForTransfer();
     for(const r of toAdd){
+      const already=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',r._table).eq('inventory_id',r.id).limit(1);
+      if(already.error)throw new Error(already.error.message);
+      if(already.data?.length){
+        throw new Error(`№ ${r.inventory_no} უკვე სხვა კომპლექტშია. გადატანა ვერ შესრულდა.`);
+      }
       const ii=await db.from('inventory_set_items').insert({
         set_id:targetSet.id,
         inventory_table:r._table,
@@ -2307,7 +2344,16 @@ async function confirmInventoryLinks(){
     __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();
     alert(`✅ № ${toAdd.map(x=>x.inventory_no).join(', ')} დაემატა ${targetSet.set_no}-ის კომპლექტს.\n🟩 კომპლექტის ნიშანი დაედება დაკავშირებულ ინვენტარს.\n\nთითოეული ნომრის ფაქტობრივი მომხმარებელი უცვლელი დარჩა.`);
     closeModal();await loadRecords();
-  }catch(e){alert('❌ ინვენტარების დაკავშირება ვერ მოხერხდა: '+(e.message||e))}
+  }catch(e){
+    try{
+      await restoreRemovedMemberships();
+      if(createdTransferSetId){
+        await db.from('inventory_set_items').delete().eq('set_id',createdTransferSetId);
+        await db.from('inventory_sets').delete().eq('id',createdTransferSetId);
+      }
+    }catch(rb){console.warn('კომპლექტის გადატანის rollback:',rb)}
+    alert('❌ ინვენტარების დაკავშირება ვერ მოხერხდა: '+(e.message||e)+'\n\n🛡️ ძველი კომპლექტის კავშირები და ნახევრად შექმნილი ახალი კომპლექტი უსაფრთხოების მიზნით გაუქმების/აღდგენის რეჟიმში დამუშავდა.');
+  }
 }
 
 async function getPersonAll(pid){
