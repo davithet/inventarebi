@@ -685,6 +685,8 @@ async function startInventoryScanner(targetId){
   scannerTargetId=targetId;scannerActive=true;document.getElementById('scannerModal')?.classList.add('show');setScannerStatus('📷 კამერის ჩართვა...');
   const video=document.getElementById('scannerVideo');
   try{
+    if(!window.isSecureContext && location.protocol!=='file:'){throw new Error('კამერის გამოყენებისთვის საჭიროა HTTPS. გახსენი პროგრამა GitHub Pages-ის HTTPS მისამართით.')}
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){throw new Error('ამ ბრაუზერს კამერის ჩართვა არ შეუძლია. გამოიყენე Chrome/Edge ან მობილურის Chrome.')}
     if('BarcodeDetector' in window){
       const detector=new BarcodeDetector({formats:['qr_code','code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf']});
       scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
@@ -698,7 +700,7 @@ async function startInventoryScanner(targetId){
     if(!device)throw new Error('კამერა ვერ მოიძებნა.');
     setScannerStatus('🟢 სკანირება მიმდინარეობს...');
     await scannerReader.decodeFromVideoDevice(device.deviceId,video,(result,error)=>{if(result?.getText?.())putScannedInventory(result.getText())});
-  }catch(e){setScannerStatus('❌ კამერის/სკანერის შეცდომა: '+e.message,true);alert('სკანირება ვერ დაიწყო.\n\n'+e.message+'\n\nშეამოწმე კამერის ნებართვა.');}
+  }catch(e){setScannerStatus('❌ '+(e.message||'უცნობი შეცდომა')+'\n\nთუ კამერის ნებართვა მოითხოვა, დააჭირე Allow / დაშვება.',true);}
 }
 function stopInventoryScanner(){scannerActive=false;try{scannerReader?.reset?.()}catch(e){}scannerReader=null;if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}const v=document.getElementById('scannerVideo');if(v)v.srcObject=null;document.getElementById('scannerModal')?.classList.remove('show');scannerTargetId=null}
 async function notebookView(){
