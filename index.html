@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>საინვენტარო აღრიცხვის სისტემა V49 • კომპლექტები</title>
+<title>საინვენტარო აღრიცხვის სისტემა V67 • კომპლექტები</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f3f6fa;color:#1f2937}
 header{background:#172554;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;gap:15px}
@@ -72,7 +72,7 @@ function clone(x){return JSON.parse(JSON.stringify(x))}
 function applyLocal(q,rows){let a=rows.slice();for(const f of q.filters){if(f.kind==="eq")a=a.filter(r=>String(r[f.col]??"")===String(f.val??""));else if(f.kind==="in")a=a.filter(r=>f.vals.includes(r[f.col]));else if(f.kind==="or")a=a.filter(r=>f.parts.some(p=>{const m=p.match(/^(\w+)\.ilike\.%(.+)%$/);return m&&String(r[m[1]]??"").toLowerCase().includes(m[2].toLowerCase())}));else if(f.kind==="not"&&f.op==="is"&&f.val===null)a=a.filter(r=>r[f.col]!==null&&r[f.col]!==undefined)}if(q.orderCol)a.sort((x,y)=>{const av=x[q.orderCol],bv=y[q.orderCol];if(av==bv)return 0;const z=av>bv?1:-1;return q.orderAsc?z:-z});if(q.limitN!=null)a=a.slice(0,q.limitN);if(q.columns&&q.columns!=="*"){const cols=q.columns.split(",").map(x=>x.trim());a=a.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]);return o})}return a}
 
 class LocalQuery{constructor(table){this.table=table;this.op="select";this.payload=null;this.filters=[];this.orderCol=null;this.orderAsc=true;this.limitN=null;this.columns="*";this.wantSingle=false}
- select(c="*"){this.columns=c;if(this.op==="select")this.op="select";return this} eq(c,v){this.filters.push({kind:"eq",col:c,val:v});return this} in(c,v){this.filters.push({kind:"in",col:c,vals:v});return this} or(x){this.filters.push({kind:"or",parts:x.split(",")});return this} not(c,o,v){this.filters.push({kind:"not",col:c,op:o,val:v});return this} order(c,o={}){this.orderCol=c;this.orderAsc=o.ascending!==false;return this} limit(n){this.limitN=n;return this} single(){this.wantSingle=true;return this}
+ select(c="*"){this.columns=c;if(this.op==="select")this.op="select";return this} eq(c,v){this.filters.push({kind:"eq",col:c,val:v});return this} in(c,v){this.filters.push({kind:"in",col:c,vals:v});return this} or(x){this.filters.push({kind:"or",parts:x.split(",")});return this} not(c,o,v){this.filters.push({kind:"not",col:c,op:o,val:v});return this} order(c,o={}){this.orderCol=c;this.orderAsc=o.ascending!==false;return this} limit(n){this.limitN=n;return this} single(){this.wantSingle=true;return this} maybeSingle(){this.wantSingle=true;return this}
  insert(payload){this.op="insert";this.payload=Array.isArray(payload)?payload.map(clone):[clone(payload)];return this} update(payload){this.op="update";this.payload=clone(payload);return this} delete(){this.op="delete";return this}
  async exec(){let rows=await idbGetTable(this.table);if(this.op==="select"){const out=applyLocal(this,rows);if(this.wantSingle)return {data:out[0]||null,error:out[0]?null:{message:"No rows found"}};return {data:out,error:null}}
  if(this.op==="insert"){const added=this.payload.map(r=>{const x=clone(r);if(x.id==null)x.id=localUuid();if(x.created_at==null)x.created_at=new Date().toISOString();if(x.updated_at==null)x.updated_at=new Date().toISOString();return x});rows.push(...added);await idbSetTable(this.table,rows);await idbQueue({action:"insert",table:this.table,rows:added});return {data:added.length===1?added[0]:added,error:null}}
@@ -81,7 +81,7 @@ class LocalQuery{constructor(table){this.table=table;this.op="select";this.paylo
  if(this.op==="delete"){rows=rows.filter(r=>!matched.some(m=>m.id===r.id));await idbSetTable(this.table,rows);await idbQueue({action:"delete",table:this.table,filters:this.filters});return {data:null,error:null}}}
  then(a,b){return this.exec().then(a,b)} catch(a){return this.exec().catch(a)} finally(a){return this.exec().finally(a)}}
 
-class OnlineQuery{constructor(real,table){this.real=real.from(table);this.table=table} select(c="*"){this.real=this.real.select(c);return this} eq(c,v){this.real=this.real.eq(c,v);return this} in(c,v){this.real=this.real.in(c,v);return this} or(x){this.real=this.real.or(x);return this} not(c,o,v){this.real=this.real.not(c,o,v);return this} order(c,o){this.real=this.real.order(c,o);return this} limit(n){this.real=this.real.limit(n);return this} single(){this.real=this.real.single();return this} insert(p){this.real=this.real.insert(p);return this} update(p){this.real=this.real.update(p);return this} delete(){this.real=this.real.delete();return this} then(a,b){return this.real.then(async r=>{if(r&&r.error==null)await cacheTable(this.table);return a?r&&a(r):r},b)} catch(a){return this.real.catch(a)} finally(a){return this.real.finally(a)}}
+class OnlineQuery{constructor(real,table){this.real=real.from(table);this.table=table} select(c="*"){this.real=this.real.select(c);return this} eq(c,v){this.real=this.real.eq(c,v);return this} in(c,v){this.real=this.real.in(c,v);return this} or(x){this.real=this.real.or(x);return this} not(c,o,v){this.real=this.real.not(c,o,v);return this} order(c,o){this.real=this.real.order(c,o);return this} limit(n){this.real=this.real.limit(n);return this} single(){this.real=this.real.single();return this} maybeSingle(){this.real=this.real.maybeSingle();return this} insert(p){this.real=this.real.insert(p);return this} update(p){this.real=this.real.update(p);return this} delete(){this.real=this.real.delete();return this} then(a,b){return this.real.then(async r=>{if(r&&r.error==null)await cacheTable(this.table);return a?r&&a(r):r},b)} catch(a){return this.real.catch(a)} finally(a){return this.real.finally(a)}}
 
 const dbFacade={from(table){return offlineMode?new LocalQuery(table):new OnlineQuery(sb,table)}};
 db=dbFacade;
@@ -170,8 +170,15 @@ async function restoreWrittenOffInventory(writeoffId){
     personId=pidq.data[0].id; personName=`${pidq.data[0].first_name||''} ${pidq.data[0].last_name||''}`.trim();
     if(!confirm(`აღდგენის შემდეგ ინვენტარი მიებას:\n\n👤 ${personName}\n🪪 ID: ${choice.trim()}\n\nგავაგრძელოთ?`))return;
   }else if(!confirm(`♻️ აღვადგინოთ საინვენტარო № ${inv} თავისუფალ მდგომარეობაში?\n\nშემდეგ შეგიძლია სხვა პიროვნებაზე მიაბა.`))return;
+  const setMemberQ=await db.from('inventory_set_items').select('id,set_id,actual_user_id,notes').eq('inventory_table',found._table).eq('inventory_id',found.id).limit(1);
+  const setMember=setMemberQ.data?.[0]||null;
   const up=await db.from(found._table).update({active:true,person_id:personId}).eq('id',found.id);
   if(up.error){alert('❌ ინვენტარის აღდგენა ვერ მოხერხდა: '+up.error.message);return}
+  if(setMember){
+    const setActual=personId||null;
+    const su=await db.from('inventory_set_items').update({actual_user_id:setActual,state:'normal',notes:'♻️ ჩამოწერიდან აღდგენილი კომპლექტის წევრი'}).eq('id',setMember.id);
+    if(su.error){await db.from(found._table).update({active:false,person_id:null}).eq('id',found.id);alert('❌ კომპლექტის წევრის აღდგენა ვერ მოხერხდა: '+su.error.message+'\n\nინვენტარი უსაფრთხოების მიზნით კვლავ ჩამოწერილად დარჩა.');return}
+  }
   const oldComment=String(wo.comment||'').trim();
   const stamp=new Date().toLocaleString('ka-GE');
   const actor=await getCurrentUserDisplayName();
@@ -569,8 +576,14 @@ async function openWriteoffForInventory(table,id){
   const writeoffData=await openWriteoffModal(typeLabel,inv,objectName,formerUser);
   if(!writeoffData)return;
   if(!confirm(`დადასტურება\n\n📕 საინვენტარო № ${inv} ჩამოიწერება.\n📍 ${writeoffData.destination}\n\nგავაგრძელოთ?`))return;
+  const setMembership=await db.from('inventory_set_items').select('id,set_id,actual_user_id').eq('inventory_table',table).eq('inventory_id',id).limit(1);
+  const oldSetItem=setMembership.data?.[0]||null;
   const u=await db.from(table).update({person_id:null,active:false}).eq('id',id);
   if(u.error){alert('❌ ინვენტარის ჩამოწერა ვერ მოხერხდა: '+u.error.message);return}
+  if(oldSetItem){
+    const su=await db.from('inventory_set_items').update({actual_user_id:null,state:'normal',notes:'📕 ჩამოწერილია — კომპლექტის წევრობა შენარჩუნებულია ისტორიისთვის'}).eq('id',oldSetItem.id);
+    if(su.error){await db.from(table).update({person_id:item.person_id||null,active:item.active!==false}).eq('id',id);alert('❌ კომპლექტის წევრის სტატუსის განახლება ვერ მოხერხდა: '+su.error.message+'\n\nინვენტარის წინა მდგომარეობა აღდგენილია.');return}
+  }
   const comment=[writeoffData.destination?`სად წავიდა: ${writeoffData.destination}`:'',writeoffData.comment||''].filter(Boolean).join('\n');
   const wo=await db.from('inventory_writeoffs').insert({inventory_no:inv,object_type:typeLabel,object_name:objectName||null,writeoff_date:writeoffData.writeoffDate,reason:writeoffData.reason,former_user:formerUser||null,comment:comment||null}).select().single();
   if(wo.error){await db.from(table).update({person_id:item.person_id||null,active:item.active!==false}).eq('id',id);alert('❌ ჩამოწერის ისტორიაში ჩაწერა ვერ მოხერხდა: '+wo.error.message+'\n\nინვენტარის წინა მდგომარეობა აღდგენილია.');return false}
@@ -642,7 +655,21 @@ async function openWriteoffAfterRemoval(table,id,pid,inv,item,formerUser,typeLab
   });
 }
 
-async function logHistory(inv,table,fromPid,toPid,comment){const {error}=await db.from('responsibility_history').insert({inventory_no:inv,inventory_type:table,from_person_id:fromPid||null,to_person_id:toPid||null,comment:comment||null});if(error)console.warn('history:',error.message)}
+async function logHistory(inv,table,fromPid,toPid,comment){
+  /* V67: responsibility_history-ში inventory_table არის NOT NULL.
+     ამიტომ ვინახავთ ორივე თავსებად ველს: inventory_table და inventory_type.
+     სხვა მონაცემებს არ ვცვლით. */
+  const tableName=String(table||'').trim();
+  const base={inventory_no:String(inv||''),inventory_table:tableName,inventory_type:tableName,from_person_id:fromPid||null,to_person_id:toPid||null};
+  const payload={...base,comment:comment||null};
+  let q=await db.from('responsibility_history').insert(payload);
+  if(q.error && /comment.*column|column.*comment|schema cache/i.test(String(q.error.message||''))){
+    console.warn('responsibility_history.comment არ არსებობს; ისტორია ჩაიწერება კომენტარის გარეშე.',q.error.message);
+    q=await db.from('responsibility_history').insert(base);
+  }
+  if(q.error)throw new Error('ისტორიის ჩაწერა ვერ მოხერხდა: '+q.error.message);
+  return q;
+}
 
 async function findInventoryStatus(inv){inv=String(inv||'').trim();if(!inv)return {status:'none'};const {data:wo}=await db.from('inventory_writeoffs').select('*').eq('inventory_no',inv).order('writeoff_date',{ascending:false}).limit(1);if(wo?.length&&!String(wo[0].comment||'').includes('♻️ აღდგენილია:'))return {status:'written',writeoff:wo[0]};for(const x of inventoryTables){const {data,error}=await db.from(x.table).select('*').eq('inventory_no',inv).limit(1);if(error)continue;if(data?.length)return {status:data[0].person_id?'used':'free',table:x.table,type:x.type,row:data[0]}}return {status:'none'}}
 async function checkInventoryStatus(inv){const el=document.getElementById('inventoryStatus');if(!el)return;if(!inv.trim()){el.innerHTML='';return}el.innerHTML='<div class="inv-status">🔎 მოწმდება...</div>';const r=await findInventoryStatus(inv);if(r.status==='free')el.innerHTML='<div class="inv-status inv-free">🟡 არსებობს და თავისუფალია — შეიძლება პასუხისმგებელ პირზე მიბმა.</div>';else if(r.status==='used')el.innerHTML=`<div class="inv-status inv-used">🟢 უკვე გამოყენებაშია. პასუხისმგებელი პირის ID: ${esc(r.row.person_id)}</div>`;else if(r.status==='written')el.innerHTML=`<div class="inv-status inv-written">🔴 ჩამოწერილია. მიზეზი: ${esc(r.writeoff?.reason||'')}</div>`;else el.innerHTML='<div class="inv-status inv-none">⚪ ასეთი საინვენტარო ნომერი არ მოიძებნა.</div>'}
@@ -1703,9 +1730,12 @@ async function prepareSetIndicatorsForMixedRows(rows){
   for(const [table,rs] of Object.entries(groups))await prepareSetIndicators(table,rs);
 }
 async function setGetPeople(){
-  if(__setRowsCache.length)return __setRowsCache;
-  const q=await db.from('persons').select('id,first_name,last_name,serial_no,room_no,floor').order('first_name',{ascending:true});
-  if(q.error)throw new Error(q.error.message);__setRowsCache=q.data||[];return __setRowsCache;
+  if(__setPeopleCache.size)return Array.from(__setPeopleCache.values());
+  const q=await db.from('persons').select('id,first_name,last_name,serial_no,personal_id,room_no,floor,mobile,position,employed').order('first_name',{ascending:true});
+  if(q.error)throw new Error(q.error.message);
+  __setPeopleCache.clear();
+  (q.data||[]).forEach(p=>__setPeopleCache.set(String(p.id),p));
+  return q.data||[];
 }
 async function setGetInventory(table,invNo){
   const cfg=setCfg(table);if(!cfg)return null;
@@ -1716,9 +1746,13 @@ async function setGetInventory(table,invNo){
 }
 async function setCreateMissingInventory(table,invNo,personId){
   const cfg=setCfg(table);if(!cfg)throw new Error('ინვენტარის ტიპი ვერ მოიძებნა.');
+  /* setCfg() აბრუნებს inventoryTables-ის მოკლე კონფიგურაციას,
+     სადაც fields არ არსებობს. სრული fields უნდა ავიღოთ configs-დან. */
+  const fullCfg=Object.values(configs).find(c=>c.table===table);
+  if(!fullCfg||!Array.isArray(fullCfg.fields))throw new Error('ინვენტარის ტიპის ველები ვერ მოიძებნა: '+table);
   const p=(await db.from('persons').select('room_no').eq('id',personId).maybeSingle()).data;
   const payload={inventory_no:String(invNo).trim(),person_id:personId,active:true};
-  for(const f of cfg.fields){
+  for(const f of fullCfg.fields){
     if(f[0]==='name')payload.name=cfg.type;
     if(f[0]==='model'&&payload.name==null)payload.model=cfg.type;
     if(f[0]==='room_no')payload.room_no=p?.room_no||null;
@@ -1742,7 +1776,7 @@ async function setOpenCreate(){
   <div class="field"><label>კომპლექტის №</label><input id="set_no" value="${esc(defaultNo)}"></div>
   <div class="field"><label>კომპლექტის დასახელება *</label><input id="set_name" value="კომპიუტერული სამუშაო ადგილი"></div>
   <div class="field"><label>კომპლექტის ტიპი</label><input id="set_type" value="კომპიუტერი + მონიტორი"></div>
-  <div class="field"><label>ბუღალტრული პასუხისმგებელი პირი *</label><select id="set_person"><option value="">აირჩიე...</option>${people.map(p=>`<option value="${p.id}">${esc(setPersonName(p))} • N ${esc(p.serial_no||'—')}</option>`).join('')}</select></div>
+  <div class="field"><label>ბუღალტრული პასუხისმგებელი პირი <span class="hint">(სურვილისამებრ)</span></label><select id="set_person"><option value="">ჯერ არ მივუთითოთ — მოგვიანებით შეიძლება</option>${people.map(p=>`<option value="${p.id}">${esc(setPersonName(p))} • N ${esc(p.serial_no||'—')}</option>`).join('')}</select></div>
   <div class="field full"><label>შენიშვნა</label><textarea id="set_notes" placeholder="მაგ. კომპიუტერი + მონიტორი ერთი სამუშაო ადგილის კომპლექტია"></textarea></div></div></div>
   <div class="card" style="margin-top:14px"><div class="toolbar"><h3 style="margin-right:auto">📦 კომპლექტის შემადგენლობა</h3><button type="button" class="btn btn-secondary" onclick="setAddCreateRow()">➕ ნივთის დამატება</button></div>
   <div class="hint">შეიყვანე კონკრეტული საინვენტარო ნომრები. მაგალითად: კომპიუტერი №1001 + მონიტორი №1002. სხვა კომპიუტერები/მონიტორები ავტომატურად კომპლექტში არ შევა.</div><div id="setCreateItems"></div></div>
@@ -1754,41 +1788,69 @@ function setAddCreateRow(table='computers'){
   box.insertAdjacentHTML('beforeend',`<div class="grid" data-set-create-row="${idx}" style="margin-bottom:8px;border:1px solid #e2e8f0;padding:10px;border-radius:8px"><div class="field"><label>ინვენტარის ტიპი</label><select class="set-create-type">${SET_TYPE_OPTIONS.map(x=>`<option value="${x.table}" ${x.table===table?'selected':''}>${esc(x.type)}</option>`).join('')}</select></div><div class="field"><label>საინვენტარო № *</label><input class="set-create-no" placeholder="მაგ. 1001"></div><div class="field"><label>მოქმედება</label><button type="button" class="btn btn-danger" onclick="this.closest('[data-set-create-row]').remove()">🗑️ წაშლა</button></div></div>`);
 }
 async function setSaveNew(){
+  let createdSetId=null, createdInventories=[], insertedItems=[];
   try{
-    const setNo=String(document.getElementById('set_no')?.value||'').trim(),name=String(document.getElementById('set_name')?.value||'').trim(),setType=String(document.getElementById('set_type')?.value||'').trim(),personId=document.getElementById('set_person')?.value,notes=String(document.getElementById('set_notes')?.value||'').trim();
-    if(!setNo||!name||!personId){alert('❌ შეავსე კომპლექტის №, დასახელება და პასუხისმგებელი პირი.');return}
+    const setNo=String(document.getElementById('set_no')?.value||'').trim();
+    const name=String(document.getElementById('set_name')?.value||'').trim();
+    const setType=String(document.getElementById('set_type')?.value||'').trim();
+    const selectedPersonId=String(document.getElementById('set_person')?.value||'').trim();
+    const notes=String(document.getElementById('set_notes')?.value||'').trim();
+    if(!setNo||!name){alert('❌ შეავსე კომპლექტის № და დასახელება. ბუღალტრული პასუხისმგებელი ამ ეტაპზე აუცილებელი აღარ არის.');return}
+    if(offlineMode||!navigator.onLine||!sb){alert('⚠️ ახალი კომპლექტის შექმნა ამ ეტაპზე საჭიროებს ინტერნეტს.');return}
+
+    __setRowsCache=[];
+    let validPersonRow=null, personId=null;
+    if(selectedPersonId){
+      const validPerson=await db.from('persons').select('id,first_name,last_name,serial_no,room_no,floor').eq('id',selectedPersonId).limit(1);
+      if(validPerson.error)throw new Error('პასუხისმგებელი პირის შემოწმება ვერ მოხერხდა: '+validPerson.error.message);
+      if(!validPerson.data?.length){alert('❌ არჩეული პირის ID ვერ დადასტურდა persons ცხრილში.\n\nკომპლექტი არ შეიქმნა და არსებული ინვენტარი არ შეცვლილა.');return}
+      validPersonRow=validPerson.data[0]; personId=String(validPersonRow.id);
+    }
+
     const rows=[...document.querySelectorAll('[data-set-create-row]')].map(row=>({table:row.querySelector('.set-create-type')?.value,invNo:String(row.querySelector('.set-create-no')?.value||'').trim()})).filter(x=>x.invNo);
     if(rows.length<2){alert('❌ კომპლექტში მინიმუმ 2 ნივთი უნდა იყოს.');return}
     const unique=new Set(rows.map(x=>x.table+'|'+x.invNo));if(unique.size!==rows.length){alert('❌ ერთი და იგივე ნივთი კომპლექტში ორჯერ არის მითითებული.');return}
-    const existingSet=await db.from('inventory_sets').select('id').eq('set_no',setNo).limit(1);if(existingSet.data?.length){alert('❌ ასეთი კომპლექტის № უკვე არსებობს.');return}
+    const existingSet=await db.from('inventory_sets').select('id').eq('set_no',setNo).limit(1);if(existingSet.error)throw new Error(existingSet.error.message);if(existingSet.data?.length){alert('❌ ასეთი კომპლექტის № უკვე არსებობს.');return}
+
     const invRows=[];
     for(const x of rows){
       let inv=await setGetInventory(x.table,x.invNo);
       if(!inv){
         if(!confirm(`№ ${x.invNo} (${setCfg(x.table)?.type||x.table}) სისტემაში არ არსებობს.\n\nგსურთ ახალი ინვენტარის ჩანაწერის შექმნა და ${setNo}-ში შეტანა?`))return;
-        inv=await setCreateMissingInventory(x.table,x.invNo,personId);
+        inv=await setCreateMissingInventory(x.table,x.invNo,null);
+        createdInventories.push({table:x.table,id:inv.id});
       }
       const st=await findInventoryStatus(x.invNo);if(st.status==='written'){alert(`❌ № ${x.invNo} ჩამოწერილია და ახალ კომპლექტში ვერ შევა.`);return}
-      const dup=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',x.table).eq('inventory_id',inv.id).limit(1);if(dup.data?.length){alert(`❌ № ${x.invNo} უკვე სხვა კომპლექტშია.`);return}
+      const dup=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',x.table).eq('inventory_id',inv.id).limit(1);if(dup.error)throw new Error(dup.error.message);if(dup.data?.length){alert(`❌ № ${x.invNo} უკვე სხვა კომპლექტშია.`);return}
       invRows.push({table:x.table,inv});
     }
-    const ins=await db.from('inventory_sets').insert({set_no:setNo,name,set_type:setType,responsible_person_id:personId,notes:notes||null}).select('*').single();if(ins.error)throw new Error(ins.error.message);
-    const set=ins.data;
+
+    const ins=await db.from('inventory_sets').insert({set_no:setNo,name,set_type:setType,responsible_person_id:personId||null,notes:notes||null}).select('*').single();
+    if(ins.error)throw new Error(ins.error.message);
+    const set=ins.data;createdSetId=set.id;
+
     for(const x of invRows){
       const old=x.inv.person_id||null;
-      if(old&&String(old)!==String(personId)){
-        const oldP=(await db.from('persons').select('first_name,last_name,serial_no').eq('id',old).maybeSingle()).data,newP=(await db.from('persons').select('first_name,last_name,serial_no').eq('id',personId).maybeSingle()).data;
-        if(!confirm(`№ ${x.inv.inventory_no} ახლა ეკუთვნის ${setPersonName(oldP)}-ს.\n\nგადავაბაროთ ${setPersonName(newP)}-ს როგორც ახალი კომპლექტის პასუხისმგებელ პირს?`)){await db.from('inventory_sets').delete().eq('id',set.id);return}
-        const up=await db.from(x.table).update({person_id:personId}).eq('id',x.inv.id);if(up.error)throw new Error(up.error.message);
-        await logHistory(x.inv.inventory_no,x.table,old,personId,'🧩 ახალი კომპლექტის მიღება და პასუხისმგებლობის გადაცემა');
-      }else if(!old){
-        const up=await db.from(x.table).update({person_id:personId,active:true}).eq('id',x.inv.id);if(up.error)throw new Error(up.error.message);
-        await logHistory(x.inv.inventory_no,x.table,null,personId,'🧩 ახალი კომპლექტის მიღება და პასუხისმგებელ პირზე მიბმა');
+      const actualUserId=old?String(old):personId;
+      if(!old){
+        const up=await db.from(x.table).update({person_id:personId,active:true}).eq('id',x.inv.id);
+        if(up.error)throw new Error(up.error.message);
+        await logHistory(x.inv.inventory_no,x.table,null,personId,'🧩 ახალი კომპლექტის შექმნა — უპასუხისმგებლო ნივთი მიება ბუღალტრულ პასუხისმგებელ პირს');
       }
-      const ii=await db.from('inventory_set_items').insert({set_id:set.id,inventory_table:x.table,inventory_id:x.inv.id,inventory_no:String(x.inv.inventory_no),actual_user_id:personId,state:'normal'});if(ii.error)throw new Error(ii.error.message);
+      const ii=await db.from('inventory_set_items').insert({set_id:set.id,inventory_table:x.table,inventory_id:x.inv.id,inventory_no:String(x.inv.inventory_no),actual_user_id:actualUserId,state:'normal'});
+      if(ii.error)throw new Error(ii.error.message);
+      insertedItems.push(ii.data||null);
     }
-    __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();closeModal();complexesView();alert(`✅ ${setNo} შეიქმნა.\n🟩 ყველა ნაწილი თავდაპირველად ერთიან კომპლექტად დაფიქსირდა.`);
-  }catch(e){alert('❌ კომპლექტის შექმნა ვერ მოხერხდა: '+(e.message||e))}
+    __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();closeModal();complexesView();
+    alert(`✅ ${setNo} შეიქმნა.\n\n📒 ბუღალტრული პასუხისმგებელი: ${validPersonRow?setPersonName(validPersonRow):'ჯერ არ არის მითითებული'}\n📍 არსებული ნივთების მატერიალური პასუხისმგებლები შენარჩუნებულია.`);
+  }catch(e){
+    // კომპენსაცია: ნახევრად შექმნილი კომპლექტი არ უნდა დარჩეს.
+    try{
+      if(createdSetId){await db.from('inventory_set_items').delete().eq('set_id',createdSetId);await db.from('inventory_sets').delete().eq('id',createdSetId);}
+      for(const x of createdInventories){await db.from(x.table).delete().eq('id',x.id);}
+    }catch(rb){console.warn('set rollback:',rb)}
+    alert('❌ კომპლექტის შექმნა ვერ მოხერხდა: '+(e.message||e)+'\n\n🛡️ პროგრამამ სცადა ნაწილობრივი ცვლილებების გაუქმება.');
+  }
 }
 async function setGetDetails(setId){
   const sq=await db.from('inventory_sets').select('*').eq('id',setId).single();if(sq.error)throw new Error(sq.error.message);
@@ -1803,15 +1865,22 @@ async function setGetDetails(setId){
   return {set:sq.data,items,people};
 }
 function setOverallStatus(details){
-  const hasBlack=details.items.some(x=>x.wo),hasYellow=details.items.some(x=>x.it.state==='temporary'),hasRed=details.items.some(x=>{const actual=x.it.actual_user_id||x.inv?.person_id||details.set.responsible_person_id;return String(actual)!==String(details.set.responsible_person_id)});
-  if(hasBlack)return {cls:'set-black',label:'⬛ ნაწილი ჩამოწერილია'};if(hasYellow)return {cls:'set-yellow',label:'🟨 დროებითი მდგომარეობა'};if(hasRed)return {cls:'set-red',label:'🟥 კომპლექტი გაყოფილია'};return {cls:'set-green',label:'🟩 კომპლექტი ერთიანია'};
+  const hasBlack=details.items.some(x=>x.wo),
+        hasYellow=details.items.some(x=>x.it.state==='temporary'),
+        hasNoResponsible=!details.set.responsible_person_id,
+        hasRed=!hasNoResponsible&&details.items.some(x=>{const actual=x.it.actual_user_id||x.inv?.person_id||null;return actual&&String(actual)!==String(details.set.responsible_person_id)});
+  if(hasBlack)return {cls:'set-black',label:'⬛ ნაწილი ჩამოწერილია'};
+  if(hasYellow)return {cls:'set-yellow',label:'🟨 დროებითი მდგომარეობა'};
+  if(hasNoResponsible)return {cls:'set-yellow',label:'🟨 ბუღალტრული პასუხისმგებელი არ არის მითითებული'};
+  if(hasRed)return {cls:'set-red',label:'🟥 კომპლექტი გაყოფილია'};
+  return {cls:'set-green',label:'🟩 კომპლექტი ერთიანია'};
 }
 async function complexesView(){
   currentType='complexes';
   section.innerHTML=`<div class="card"><div class="toolbar"><h2 style="margin-right:auto">🧩 კომპლექტები</h2><button class="btn btn-primary" onclick="setOpenCreate()">➕ ახალი კომპლექტის მიღება</button><button class="btn btn-secondary" onclick="complexesView()">🔄 განახლება</button></div><div class="hint">კომპლექტში შევა მხოლოდ შენ მიერ მითითებული საინვენტარო ნომრები. მაგალითად 100 + 101. 📒 ბუღალტრული პასუხისმგებელი ფიქსირდება კომპლექტისთვის, ხოლო თითოეულ ნომერზე ცალკე ინახება 📍 მატერიალური პასუხისმგებელი / ვისთან დგას. სხვა კომპიუტერები/მონიტორები ავტომატურად კომპლექტში არ შევა.</div><div id="setsBox" style="margin-top:14px"><div class="status">🔄 კომპლექტები იტვირთება...</div></div></div>`;
   try{
     const q=await db.from('inventory_sets').select('*').order('created_at',{ascending:false});if(q.error)throw new Error(q.error.message);
-    const people=await setGetPeople(),pm=new Map(people.map(p=>[String(p.id),p]));__setRowsCache=q.data||[];
+    const people=await setGetPeople(),pm=new Map(people.map(p=>[String(p.id),p]));
     if(!q.data?.length){setsBox.innerHTML='<div class="inv-status inv-none">📭 კომპლექტი ჯერ შექმნილი არ არის.</div>';return}
     const cards=[];
     for(const st of q.data){
@@ -1825,40 +1894,101 @@ async function openSetDetails(setId){
   try{
     const d=await setGetDetails(setId),meta=setOverallStatus(d),pmap=new Map(d.people.map(p=>[String(p.id),p]));
     modalTitle.textContent='🧩 '+d.set.set_no+' — '+(d.set.name||'კომპლექტი');recordForm.onsubmit=e=>e.preventDefault();
-    recordForm.innerHTML=`<div class="set-card"><div class="toolbar"><h3 style="margin-right:auto">🧩 ${esc(d.set.set_no)} • ${esc(d.set.name||'')}</h3><span class="set-status ${meta.cls}">${meta.label}</span></div><div class="grid"><div><b>ბუღალტრული პასუხისმგებელი:</b><br>${esc(setPersonName(pmap.get(String(d.set.responsible_person_id))))}</div><div><b>კომპლექტის ტიპი:</b><br>${esc(d.set.set_type||'—')}</div><div><b>შენიშვნა:</b><br>${esc(d.set.notes||'—')}</div></div></div>
-    <div class="card" style="margin-top:14px"><div class="toolbar"><h3 style="margin-right:auto">📦 კომპლექტის ნაწილები (${d.items.length})</h3></div><div class="table-wrap"><table><thead><tr><th>ნიშანი</th><th>ტიპი</th><th>№</th><th>ბუღალტრული პასუხისმგებელი</th><th>ვისთან დგას / ფაქტობრივი მფლობელი</th><th>მდგომარეობა</th><th>მოქმედება</th></tr></thead><tbody>
+    recordForm.innerHTML=`<div class="set-card"><div class="toolbar"><h3 style="margin-right:auto">🧩 ${esc(d.set.set_no)} • ${esc(d.set.name||'')}</h3><span class="set-status ${meta.cls}">${meta.label}</span></div><div class="grid"><div><b>ბუღალტრული პასუხისმგებელი:</b><br>${esc(setPersonName(pmap.get(String(d.set.responsible_person_id))))}<br><button type="button" class="btn btn-secondary" style="margin-top:6px" onclick="setChangeResponsible('${d.set.id}')">📒 პასუხისმგებლის არჩევა</button></div><div><b>კომპლექტის ტიპი:</b><br>${esc(d.set.set_type||'—')}</div><div><b>შენიშვნა:</b><br>${esc(d.set.notes||'—')}</div></div></div>
+    <div class="card" style="margin-top:14px"><div class="toolbar"><h3 style="margin-right:auto">📦 კომპლექტის ნაწილები (${d.items.length})</h3></div><div class="hint" style="margin-bottom:10px">📒 ბუღალტრული პასუხისმგებელი ინიშნება ერთხელ, მთლიან კომპლექტზე. აქ N/ID-ის შეყვანა საჭირო არ არის. 📍 „ვისთან დგას“ თითოეულ ნივთზე ცალკე იცვლება მხოლოდ საჭიროების შემთხვევაში.</div><div class="table-wrap"><table><thead><tr><th>ნიშანი</th><th>ტიპი</th><th>№</th><th>ბუღალტრული პასუხისმგებელი</th><th>ვისთან დგას / ფაქტობრივი მფლობელი</th><th>მდგომარეობა</th><th>მოქმედება</th></tr></thead><tbody>
     ${d.items.map(x=>{const im=setStatusMeta(x.it,x.inv,x.wo,d.set);return `<tr><td><span class="set-square ${im.cls}">${im.symbol}</span></td><td>${esc(x.cfg?.type||x.it.inventory_table)}</td><td><b>${esc(x.it.inventory_no)}</b></td><td>${esc(setPersonName(x.resp))}</td><td>${esc(setPersonName(x.actual))}</td><td><b>${esc(im.label)}</b></td><td><button class="btn btn-primary" onclick="setChangeActualUser('${x.it.id}')">👤 ფაქტობრივი მომხმარებელი</button> <button class="btn btn-warning" onclick="setToggleTemporary('${x.it.id}')">${x.it.state==='temporary'?'🟩 დროებითიდან მოხსნა':'🟨 დროებითად მონიშვნა'}</button> <button class="btn btn-danger" onclick="setDetachItem('${x.it.id}')">↩️ კომპლექტიდან გამოყოფა</button></td></tr>`}).join('')}</tbody></table></div>
     <div class="card" style="margin-top:12px;background:#f8fbff"><h4>➕ კომპლექტში არსებული ინვენტარის დამატება</h4><div class="grid"><div class="field"><label>ტიპი</label><select id="setAddType">${SET_TYPE_OPTIONS.map(x=>`<option value="${x.table}">${esc(x.type)}</option>`).join('')}</select></div><div class="field"><label>საინვენტარო №</label><input id="setAddNo" placeholder="მაგ. 10003"></div><div class="field"><button class="btn btn-success" onclick="setAddItem('${d.set.id}')">➕ დამატება</button></div></div></div></div><div class="toolbar"><button class="btn btn-secondary" onclick="closeModal()">დახურვა</button></div>`;
     modal.classList.add('show');
   }catch(e){alert('❌ კომპლექტის გახსნა ვერ მოხერხდა: '+(e.message||e))}
 }
+async function setPersonPicker(title, people, currentId, allowEmpty, onSave){
+  modalTitle.textContent=title;
+  recordForm.onsubmit=e=>e.preventDefault();
+  const current=people.find(p=>String(p.id)===String(currentId||''));
+  const opts=people.map(p=>`<button type="button" class="person-pick-row" data-id="${esc(p.id)}" style="display:block;width:100%;text-align:left;margin:4px 0;padding:9px;border:1px solid #dbe3ee;border-radius:8px;background:#fff;cursor:pointer">👤 <b>${esc(setPersonName(p))}</b> <span style="color:#64748b">• N: ${esc(p.serial_no||'—')} • პირადი ID: ${esc(p.personal_id||'—')}</span></button>`).join('');
+  recordForm.innerHTML=`<div class="set-card">
+    <h3 style="margin-top:0">${esc(title)}</h3>
+    <div class="field"><label>🔎 მოძებნე სახელი, გვარი, N ან ID</label><input id="personPickerSearch" autocomplete="off" placeholder="მაგ. დავით / ბერიძე / 125 / 12345678901"></div>
+    <div id="personPickerCount" class="hint" style="margin:6px 0">მოიძებნა: ${people.length}</div>
+    <div id="personPickerList" style="max-height:340px;overflow:auto;border-top:1px solid #e2e8f0;padding-top:6px">${opts}</div>
+    <div id="personPickerSelected" class="hint" style="margin-top:8px">არჩეული: ${esc(setPersonName(current)||'არ არის არჩეული')}</div>
+    <div class="toolbar" style="margin-top:12px;margin-bottom:0">
+      ${allowEmpty?'<button type="button" class="btn btn-warning" id="personPickerClear">✖ პასუხისმგებლის მოხსნა</button>':''}
+      <button type="button" class="btn btn-success" id="personPickerSave">💾 შენახვა</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">დახურვა</button>
+    </div></div>`;
+  let selectedId=currentId||null;
+  const search=document.getElementById('personPickerSearch'), list=document.getElementById('personPickerList'), count=document.getElementById('personPickerCount'), selected=document.getElementById('personPickerSelected');
+  function filter(){
+    const q=String(search.value||'').trim().toLowerCase(); let shown=0;
+    list.querySelectorAll('.person-pick-row').forEach(btn=>{
+      const p=people.find(x=>String(x.id)===String(btn.dataset.id));
+      const text=`${setPersonName(p)} ${p?.first_name||''} ${p?.last_name||''} ${p?.serial_no||''} ${p?.personal_id||''} ${p?.id||''} ${p?.room_no||''} ${p?.position||''}`.toLowerCase();
+      const ok=!q||text.includes(q); btn.style.display=ok?'block':'none'; if(ok)shown++;
+    });
+    count.textContent=`მოიძებნა: ${shown}`;
+  }
+  search.oninput=filter;
+  list.querySelectorAll('.person-pick-row').forEach(btn=>btn.onclick=()=>{
+    selectedId=btn.dataset.id;
+    const p=people.find(x=>String(x.id)===String(selectedId));
+    selected.innerHTML=`არჩეული: 👤 <b>${esc(setPersonName(p))}</b> • N: ${esc(p?.serial_no||'—')}`;
+    list.querySelectorAll('.person-pick-row').forEach(x=>x.style.outline=''); btn.style.outline='2px solid #2563eb';
+  });
+  if(allowEmpty){document.getElementById('personPickerClear').onclick=()=>{selectedId=null;selected.textContent='არჩეული: არ არის მითითებული';list.querySelectorAll('.person-pick-row').forEach(x=>x.style.outline='')}}
+  document.getElementById('personPickerSave').onclick=async()=>{await onSave(selectedId,people.find(p=>String(p.id)===String(selectedId||''))||null)};
+  modal.classList.add('show'); search.focus();
+}
+
+async function setChangeResponsible(setId){
+  try{
+    if(offlineMode||!navigator.onLine||!sb){alert('⚠️ ბუღალტრული პასუხისმგებლის შეცვლა ინტერნეტს საჭიროებს.');return}
+    const people=await setGetPeople();
+    const sq=await db.from('inventory_sets').select('id,set_no,responsible_person_id').eq('id',setId).single();
+    if(sq.error)throw new Error(sq.error.message);
+    const currentId=sq.data.responsible_person_id||null;
+    await setPersonPicker('📒 ბუღალტრული პასუხისმგებლის არჩევა',people,currentId,true,async(newId,person)=>{
+      if(String(currentId||'')===String(newId||'')){alert('ℹ️ ბუღალტრული პასუხისმგებელი არ შეცვლილა.');return}
+      if(!confirm(`კომპლექტი: ${sq.data.set_no}\n\nძველი: ${setPersonName(people.find(p=>String(p.id)===String(currentId||'')))||'არ არის მითითებული'}\nახალი: ${setPersonName(person)||'არ არის მითითებული'}\n\nმხოლოდ ბუღალტრული პასუხისმგებელი შეიცვლება.\n„ვისთან დგას / ფაქტობრივი მფლობელი“ არ შეიცვლება.\n\nგავაგრძელოთ?`))return;
+      const up=await sb.from('inventory_sets').update({responsible_person_id:newId||null}).eq('id',setId);
+      if(up.error)throw new Error(up.error.message);
+      __setRowsCache=[];__setPeopleCache.clear();await cacheAllTables();await openSetDetails(setId);
+    });
+  }catch(e){alert('❌ პასუხისმგებლის არჩევა/შენახვა ვერ მოხერხდა: '+(e.message||e))}
+}
+
 async function setChangeActualUser(itemId){
   try{
     const people=await setGetPeople();
     const q=await db.from('inventory_set_items').select('*').eq('id',itemId).single();
     if(q.error)throw new Error(q.error.message);
-    const choice=prompt('მატერიალური პასუხისმგებელი / ვისთან დგას — პიროვნების N (რიგითი უნიკალური №) შეიყვანე.\\n\\nთუ ცარიელს დატოვებ, ნივთი დარჩება ბუღალტრული პასუხისმგებელი პირისთან.','');
-    if(choice===null)return;
-    let person=null;
-    if(choice.trim()){
-      person=people.find(p=>String(p.serial_no||'')===choice.trim())||people.find(p=>String(p.id)===choice.trim());
-      if(!person){alert('❌ პიროვნება ვერ მოიძებნა. შეიყვანე N ან პიროვნების ID.');return}
-    }
-    const setQ=await db.from('inventory_sets').select('responsible_person_id').eq('id',q.data.set_id).single();
+    const oldItem=q.data;
+    const setQ=await db.from('inventory_sets').select('responsible_person_id').eq('id',oldItem.set_id).single();
     if(setQ.error)throw new Error(setQ.error.message);
-    const targetPersonId=person?.id||setQ.data.responsible_person_id||null;
-    const oldPersonId=q.data.actual_user_id||null;
-    const up=await db.from('inventory_set_items').update({actual_user_id:targetPersonId,state:'normal'}).eq('id',itemId);
-    if(up.error)throw new Error(up.error.message);
-    if(q.data.inventory_table&&q.data.inventory_id){
-      const invUp=await db.from(q.data.inventory_table).update({person_id:targetPersonId,active:true}).eq('id',q.data.inventory_id);
-      if(invUp.error)throw new Error(invUp.error.message);
-      if(String(oldPersonId||'')!==String(targetPersonId||'')){
-        await logHistory(q.data.inventory_no,q.data.inventory_table,oldPersonId,targetPersonId,'🧩 კომპლექტში მატერიალური პასუხისმგებელი/ადგილმდებარეობის შეცვლა');
+    const currentId=oldItem.actual_user_id||null;
+    await setPersonPicker('👤 ფაქტობრივი მომხმარებლის არჩევა',people,currentId,true,async(targetPersonId,person)=>{
+      const targetId=targetPersonId||setQ.data.responsible_person_id||null;
+      const oldPersonId=oldItem.actual_user_id||null;
+      if(String(oldPersonId||'')===String(targetId||'')){alert('ℹ️ ფაქტობრივი მომხმარებელი უკვე იგივე პირია.');return}
+      if(!confirm(`№ ${oldItem.inventory_no}\n\nძველი: ${setPersonName(people.find(p=>String(p.id)===String(oldPersonId)))||'არ არის მითითებული'}\nახალი: ${setPersonName(person)||'ბუღალტრული პასუხისმგებელი'}\n\nეს შეცვლის „ვისთან დგას“ მონაცემს და ინვენტარის person_id-ს.\n\nგავაგრძელოთ?`))return;
+      const up=await db.from('inventory_set_items').update({actual_user_id:targetId,state:'normal'}).eq('id',itemId);
+      if(up.error)throw new Error(up.error.message);
+      let invOld=null;
+      if(oldItem.inventory_table&&oldItem.inventory_id){
+        const iq=await db.from(oldItem.inventory_table).select('person_id,active').eq('id',oldItem.inventory_id).single();
+        if(iq.error)throw new Error(iq.error.message);invOld=iq.data;
+        const invUp=await db.from(oldItem.inventory_table).update({person_id:targetId,active:true}).eq('id',oldItem.inventory_id);
+        if(invUp.error){await db.from('inventory_set_items').update({actual_user_id:oldPersonId,state:oldItem.state||'normal'}).eq('id',itemId);throw new Error(invUp.error.message)}
       }
-    }
-    __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();await openSetDetails(q.data.set_id);
-  }catch(e){alert('❌ მატერიალური პასუხისმგებლის შეცვლა ვერ მოხერხდა: '+(e.message||e))}
+      try{await logHistory(oldItem.inventory_no,oldItem.inventory_table,oldPersonId,targetId,'🧩 კომპლექტში მატერიალური პასუხისმგებლის/ვისთან დგას შეცვლა');}
+      catch(histErr){
+        await db.from('inventory_set_items').update({actual_user_id:oldPersonId,state:oldItem.state||'normal'}).eq('id',itemId);
+        if(oldItem.inventory_table&&oldItem.inventory_id&&invOld)await db.from(oldItem.inventory_table).update({person_id:invOld.person_id||null,active:invOld.active!==false}).eq('id',oldItem.inventory_id);
+        throw histErr;
+      }
+      __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();await openSetDetails(oldItem.set_id);
+    });
+  }catch(e){alert('❌ ფაქტობრივი მომხმარებლის არჩევა/შენახვა ვერ მოხერხდა: '+(e.message||e))}
 }
 async function setToggleTemporary(itemId){
   const q=await db.from('inventory_set_items').select('state,set_id').eq('id',itemId).single();if(q.error){alert(q.error.message);return}
@@ -1869,18 +1999,26 @@ async function setToggleTemporary(itemId){
 }
 async function setDetachItem(itemId){
   const q=await db.from('inventory_set_items').select('*').eq('id',itemId).single();if(q.error){alert(q.error.message);return}
-  if(!confirm(`№ ${q.data.inventory_no} კომპლექტიდან გამოყოფა?\\n\\nინვენტარი დარჩება თავის მიმდინარე მატერიალურ პასუხისმგებელ პირთან.`))return;
-  const del=await db.from('inventory_set_items').delete().eq('id',itemId);if(del.error){alert(del.error.message);return}
+  const countQ=await db.from('inventory_set_items').select('id').eq('set_id',q.data.set_id);if(countQ.error){alert(countQ.error.message);return}
+  const isLast=(countQ.data||[]).length<=1;
+  const msg=isLast
+    ? `№ ${q.data.inventory_no} არის ამ კომპლექტის ბოლო წევრი.\n\nკომპლექტიდან გამოყოფის შემდეგ ცარიელი კომპლექტი დარჩება ისტორიისთვის.\n\nგინდა გამოყოფა?`
+    : `№ ${q.data.inventory_no} კომპლექტიდან გამოყოფა?\n\nინვენტარი დარჩება თავის მიმდინარე მატერიალურ პასუხისმგებელ პირთან.`;
+  if(!confirm(msg))return;
+  const del=await db.from('inventory_set_items').delete().eq('id',itemId);if(del.error){alert('❌ კომპლექტიდან გამოყოფა ვერ მოხერხდა: '+del.error.message);return}
+  try{await logHistory(q.data.inventory_no,q.data.inventory_table,q.data.actual_user_id||null,q.data.actual_user_id||null,'🧩 კომპლექტიდან გამოყოფა');}catch(e){console.warn(e)}
   await openSetDetails(q.data.set_id);
 }
 async function setAddItem(setId){
   const table=document.getElementById('setAddType')?.value,no=String(document.getElementById('setAddNo')?.value||'').trim();if(!table||!no){alert('შეავსე ტიპი და საინვენტარო №.');return}
   try{
     const d=await setGetDetails(setId),inv=await setGetInventory(table,no);if(!inv){alert('❌ ეს ინვენტარი სისტემაში ვერ მოიძებნა. ჯერ შექმენი ინვენტარის ჩანაწერი.');return}
-    const dup=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',table).eq('inventory_id',inv.id).limit(1);if(dup.data?.length){alert('❌ ეს ინვენტარი უკვე კომპლექტშია.');return}
+    const st=await findInventoryStatus(no);if(st.status==='written'){alert('❌ ეს საინვენტარო ნომერი ჩამოწერილია და მოქმედ კომპლექტში ვერ დაემატება.');return}
+    const dup=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',table).eq('inventory_id',inv.id).limit(1);if(dup.error)throw new Error(dup.error.message);if(dup.data?.length){alert('❌ ეს ინვენტარი უკვე კომპლექტშია.');return}
     const actualUserId=inv.person_id||d.set.responsible_person_id;
+    if(!confirm(`კომპლექტი: ${d.set.set_no}\n\n№ ${no} დაემატება კომპლექტს.\n📍 ვისთან დგას: ${setPersonName(inv.person_id?d.people.find(p=>String(p.id)===String(inv.person_id)):d.people.find(p=>String(p.id)===String(d.set.responsible_person_id)))}\n\nდავამატოთ?`))return;
     const ins=await db.from('inventory_set_items').insert({set_id:setId,inventory_table:table,inventory_id:inv.id,inventory_no:no,actual_user_id:actualUserId,state:'normal'});if(ins.error)throw new Error(ins.error.message);
-    if(!inv.person_id){const up=await db.from(table).update({person_id:d.set.responsible_person_id,active:true}).eq('id',inv.id);if(up.error)throw new Error(up.error.message);}
+    if(!inv.person_id){const up=await db.from(table).update({person_id:d.set.responsible_person_id,active:true}).eq('id',inv.id);if(up.error){await db.from('inventory_set_items').delete().eq('id',ins.data?.id);throw new Error(up.error.message)};await logHistory(no,table,null,d.set.responsible_person_id,'🧩 არსებული უპასუხისმგებლო ნივთის კომპლექტში დამატება')}
     await openSetDetails(setId);
   }catch(e){alert('❌ კომპლექტში დამატება ვერ მოხერხდა: '+(e.message||e))}
 }
@@ -1999,24 +2137,26 @@ function toggleInventoryLink(key,checked){
 }
 
 async function chooseLinkResponsible(sourceInv,selected){
-  const ids=[sourceInv.person_id,...selected.map(x=>x.person_id)].filter(Boolean);
-  const uniq=[...new Set(ids.map(String))];
-  const people=[];
+  /* ბუღალტრული პასუხისმგებელი აუცილებლად უნდა არსებობდეს public.persons-ში,
+     რადგან inventory_sets.responsible_person_id პირდაპირ persons(id)-ზეა მიბმული. */
+  const ids=[sourceInv?.person_id,...selected.map(x=>x.person_id)].filter(Boolean).map(String);
+  const uniq=[...new Set(ids)];
+  let people=[];
   if(uniq.length){
     const pq=await db.from('persons').select('id,first_name,last_name,serial_no').in('id',uniq);
-    if(!pq.error)people.push(...(pq.data||[]));
+    if(!pq.error) people=pq.data||[];
   }
   if(!people.length){
     const all=await setGetPeople();
-    const choice=prompt('კომპლექტის ბუღალტრული პასუხისმგებელი პირის N შეიყვანე:','');
+    const choice=prompt('კომპლექტის ბუღალტრული პასუხისმგებელი ვერ განისაზღვრა არსებული ინვენტარის ჩანაწერებიდან.\n\nშეიყვანე პირის რიგითი № ან ID:','');
     if(choice===null)return null;
     const p=all.find(x=>String(x.serial_no||'')===choice.trim()||String(x.id)===choice.trim());
-    if(!p){alert('❌ ასეთი პიროვნება ვერ მოიძებნა.');return null}
+    if(!p){alert('❌ ასეთი პიროვნება ვერ მოიძებნა persons ცხრილში.\nკომპლექტი არ შეიქმნა, მონაცემები არ შეცვლილა.');return null}
     return p;
   }
   if(people.length===1)return people[0];
   const text=people.map((p,i)=>`${i+1}. ${setPersonName(p)} • N ${p.serial_no||'—'}`).join('\n');
-  const choice=prompt(`⚠️ შერჩეულ ინვენტარებს სხვადასხვა პასუხისმგებელი ჰყავთ.\n\n${text}\n\nშეიყვანე ნომერი 1-${people.length} და აირჩიე ერთი ბუღალტრული პასუხისმგებელი პირი:`,'1');
+  const choice=prompt(`⚠️ შერჩეულ ინვენტარებს სხვადასხვა პირი ჰყავთ.\n\n${text}\n\nშეიყვანე 1-${people.length} და აირჩიე კომპლექტის ბუღალტრული პასუხისმგებელი:`,'1');
   if(choice===null)return null;
   const n=Number(choice);if(!Number.isInteger(n)||n<1||n>people.length){alert('❌ არჩევანი არასწორია.');return null}
   return people[n-1];
@@ -2029,15 +2169,6 @@ async function confirmInventoryLinks(){
     const selected=__invLinkResults.filter(r=>__invLinkSelected.has(r._table+'|'+r.id));
     if(!selected.length){alert('❌ მონიშნული ინვენტარი ვერ მოიძებნა.');return}
 
-    /* უკვე არსებულ კომპლექტებში მყოფ ნივთებს არ ვაერთიანებთ ჩუმად */
-    const existingSets=[];
-    for(const r of selected){
-      const sq=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',r._table).eq('inventory_id',r.id).limit(1);
-      if(sq.data?.length){
-        const st=await db.from('inventory_sets').select('id,set_no,name,responsible_person_id').eq('id',sq.data[0].set_id).single();
-        if(!st.error)existingSets.push({r,set:st.data});
-      }
-    }
     const srcSetQ=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',__invLinkSource.table).eq('inventory_id',__invLinkSource.id).limit(1);
     let srcSet=null;
     if(srcSetQ.data?.length){
@@ -2045,6 +2176,15 @@ async function confirmInventoryLinks(){
       if(!st.error)srcSet=st.data;
     }
 
+    /* უკვე არსებულ კომპლექტში მყოფი ნივთები — მხოლოდ მკაფიო დადასტურებით გადავიტანოთ */
+    const existingSets=[];
+    for(const r of selected){
+      const sq=await db.from('inventory_set_items').select('id,set_id').eq('inventory_table',r._table).eq('inventory_id',r.id).limit(1);
+      if(sq.data?.length){
+        const st=await db.from('inventory_sets').select('id,set_no,name,responsible_person_id').eq('id',sq.data[0].set_id).single();
+        if(!st.error)existingSets.push({r,set:st.data,itemId:sq.data[0].id});
+      }
+    }
     if(existingSets.length){
       const uniqueSetIds=[...new Set(existingSets.map(x=>String(x.set.id)))];
       if(srcSet && uniqueSetIds.every(id=>id===String(srcSet.id))){
@@ -2052,71 +2192,81 @@ async function confirmInventoryLinks(){
         await openSetDetails(srcSet.id);return;
       }
       const list=existingSets.map(x=>`№ ${x.r.inventory_no} → ${x.set.set_no} (${x.set.name||'კომპლექტი'})`).join('\n');
-      if(!confirm(`⚠️ მონიშნულიდან ზოგი ინვენტარი უკვე სხვა კომპლექტშია:\n\n${list}\n\nმისი სხვა კომპლექტიდან გადატანა გინდა?\\n\\nეს ცვლილება ძველ კომპლექტს დააშორებს ამ ნაწილს.`))return;
-      /* ძველი კავშირის წაშლა მხოლოდ მკაფიო დადასტურების შემდეგ */
-      for(const x of existingSets){
-        const del=await db.from('inventory_set_items').delete().eq('id',(await db.from('inventory_set_items').select('id').eq('inventory_table',x.r._table).eq('inventory_id',x.r.id).single()).data.id);
-        if(del.error)throw new Error(del.error.message);
-      }
+      if(!confirm(`⚠️ მონიშნულიდან ზოგი ინვენტარი უკვე სხვა კომპლექტშია:\n\n${list}\n\nგინდა მათი ამ კომპლექტში გადატანა?\n\nძველი კომპლექტიდან მხოლოდ კავშირი მოიხსნება. ინვენტარის „ვისთან დგას“ მონაცემი არ შეიცვლება.`))return;
     }
 
     let targetSet=srcSet;
     if(!targetSet){
-      const person=await chooseLinkResponsible(source,selected);
-      if(!person)return;
+      /* ბუღალტრული პასუხისმგებელი ამ ეტაპზე სავალდებულო აღარ არის.
+         კომპლექტი შეიძლება შეიქმნას პიროვნების N/ID-ის გარეშე და პასუხისმგებელი
+         მოგვიანებით მიეთითოს კომპლექტის დეტალებიდან. */
+      const validPersonRow=null;
+
       const defaultNo=await setCreateNo();
-      const name=prompt('კომპლექტის დასახელება:', 'კომპიუტერული სამუშაო ადგილი');
+      const name=prompt('კომპლექტის დასახელება:','საინვენტარო კომპლექტი');
       if(name===null||!String(name).trim())return;
-      const setType=prompt('კომპლექტის ტიპი:', 'კომპიუტერი + მონიტორი');
+      const setType=prompt('კომპლექტის ტიპი:','კომპიუტერი + მონიტორი');
       if(setType===null)return;
       const notes=prompt('შენიშვნა (სურვილისამებრ):','დაფანტული ინვენტარების შემდგომი დაკავშირება');
-      const ok=confirm(`⚠️ საბოლოო შემოწმება\n\nკომპლექტი: ${defaultNo}\nპასუხისმგებელი: ${setPersonName(person)}\n\nსაწყისი № ${source.inventory_no}\n${selected.map(x=>' + № '+x.inventory_no+' • '+x._type).join('\n')}\n\nდარწმუნებული ხარ, რომ ეს ნომრები ერთი კომპლექტია?`);
+      const allItems=[{...source,_table:__invLinkSource.table,_type:__invLinkSource.cfg.type},...selected];
+      const ok=confirm(`⚠️ საბოლოო შემოწმება\n\nკომპლექტი: ${defaultNo}\nბუღალტრული პასუხისმგებელი: ჯერ არ არის მითითებული\n\n${allItems.map(x=>'№ '+x.inventory_no+' • '+x._type+' • ფაქტობრივად: '+setPersonName((x.person_id?{first_name:'',last_name:''}:null))).join('\n')}\n\nდარწმუნებული ხარ, რომ ეს ნომრები ერთი კომპლექტია?`);
       if(!ok)return;
-      const ins=await db.from('inventory_sets').insert({set_no:defaultNo,name:String(name).trim(),set_type:String(setType).trim(),responsible_person_id:person.id,notes:String(notes||'').trim()||null}).select('*').single();
+
+      const ins=await db.from('inventory_sets').insert({
+        set_no:defaultNo,
+        name:String(name).trim(),
+        set_type:String(setType).trim(),
+        responsible_person_id:null,
+        notes:String(notes||'').trim()||null
+      }).select('*').single();
       if(ins.error)throw new Error(ins.error.message);
       targetSet=ins.data;
-      const allItems=[{...source,_table:__invLinkSource.table,_type:__invLinkSource.cfg.type},...selected];
+
+      /* ძალიან მნიშვნელოვანი: inventory.person_id არ იცვლება.
+         ის რჩება კონკრეტული ნომრის ფაქტობრივ მომხმარებლად.
+         ბუღალტრული პასუხისმგებელი ინახება მხოლოდ inventory_sets-ში. */
       for(const r of allItems){
-        // person_id = ბუღალტრული პასუხისმგებელი; actual_user_id = ვისთან დგას ფაქტობრივად.
-        const actualUserId=r.person_id||person.id;
-        const up=await db.from(r._table).update({person_id:person.id,active:true}).eq('id',r.id);
-        if(up.error)throw new Error(up.error.message);
-        if(actualUserId!==person.id){
-          await logHistory(r.inventory_no,r._table,actualUserId,person.id,'🧩 კომპლექტში მიბმა — ბუღალტრული პასუხისმგებელი დაფიქსირდა; ფაქტობრივი მომხმარებელი შენარჩუნდა');
-        }
-        const ii=await db.from('inventory_set_items').insert({set_id:targetSet.id,inventory_table:r._table,inventory_id:r.id,inventory_no:String(r.inventory_no),actual_user_id:actualUserId,state:'normal'});
+        const actualUserId=r.person_id||null;
+        const ii=await db.from('inventory_set_items').insert({
+          set_id:targetSet.id,
+          inventory_table:r._table,
+          inventory_id:r.id,
+          inventory_no:String(r.inventory_no),
+          actual_user_id:actualUserId,
+          state:'normal'
+        });
         if(ii.error)throw new Error(ii.error.message);
       }
-      __setPeopleCache.clear();__setRowsCache=[];
-      await cacheAllTables();
-      alert(`✅ ${targetSet.set_no} შეიქმნა.\n\n${allItems.length} ინვენტარი ავტომატურად დაფიქსირდა როგორც ერთი კომპლექტი.\n🟩 კომპლექტის ნიშანი დაედება ყველა დაკავშირებულ ინვენტარს.`);
+      __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();
+      alert(`✅ ${targetSet.set_no} შეიქმნა.\n\n${allItems.length} საინვენტარო ნომერი გაერთიანდა ერთ კომპლექტში.\n🟨 ბუღალტრული პასუხისმგებელი ჯერ არ არის მითითებული.\n📍 თითოეული ნომრის ფაქტობრივი მომხმარებელი უცვლელი დარჩა.\n\nსაჭიროების შემთხვევაში მოგვიანებით მიუთითებ პასუხისმგებელს კომპლექტის დეტალებიდან.`);
       closeModal();await loadRecords();return;
     }
 
-    /* არსებული კომპლექტის შემთხვევაში მხოლოდ მონიშნულ ნაწილებს ვამატებთ */
     const targetPerson=targetSet.responsible_person_id;
+    const rp=targetPerson?await db.from('persons').select('id,first_name,last_name,serial_no').eq('id',targetPerson).maybeSingle():{data:null,error:null};
+    if(targetPerson && (rp.error||!rp.data)){alert('❌ ამ კომპლექტის ბუღალტრული პასუხისმგებელი persons ცხრილში აღარ არსებობს.');return}
+
     const toAdd=[];
     for(const r of selected){
       const exists=await db.from('inventory_set_items').select('id').eq('set_id',targetSet.id).eq('inventory_table',r._table).eq('inventory_id',r.id).limit(1);
       if(!exists.data?.length)toAdd.push(r);
     }
     if(!toAdd.length){alert('ℹ️ მონიშნული ინვენტარი უკვე ამ კომპლექტშია.');return}
-    const confirmText=`კომპლექტი: ${targetSet.set_no}\nპასუხისმგებელი: ${setPersonName((await db.from('persons').select('*').eq('id',targetPerson).maybeSingle()).data)}\n\nდაემატება:\n${toAdd.map(x=>'№ '+x.inventory_no+' • '+x._type).join('\n')}\n\nდავამატოთ?`;
-    if(!confirm(confirmText))return;
+    if(!confirm(`კომპლექტი: ${targetSet.set_no}\nბუღალტრული პასუხისმგებელი: ${setPersonName(rp.data)}\n\nდაემატება:\n${toAdd.map(x=>'№ '+x.inventory_no+' • '+x._type).join('\n')}\n\nინვენტარის მიმდინარე მომხმარებლები უცვლელი დარჩება.\n\nდავამატოთ?`))return;
+
     for(const r of toAdd){
-      const old=r.person_id||null;
-      // person_id = ბუღალტრული პასუხისმგებელი; old ინახება როგორც ფაქტობრივი მომხმარებელი.
-      const actualUserId=old||targetPerson;
-      const up=await db.from(r._table).update({person_id:targetPerson,active:true}).eq('id',r.id);
-      if(up.error)throw new Error(up.error.message);
-      if(old && String(old)!==String(targetPerson)){
-        await logHistory(r.inventory_no,r._table,old,targetPerson,'🧩 არსებულ კომპლექტში მიბმა — ბუღალტრული პასუხისმგებელი დაფიქსირდა; ფაქტობრივი მომხმარებელი შენარჩუნდა');
-      }
-      const ii=await db.from('inventory_set_items').insert({set_id:targetSet.id,inventory_table:r._table,inventory_id:r.id,inventory_no:String(r.inventory_no),actual_user_id:actualUserId,state:'normal'});
+      const ii=await db.from('inventory_set_items').insert({
+        set_id:targetSet.id,
+        inventory_table:r._table,
+        inventory_id:r.id,
+        inventory_no:String(r.inventory_no),
+        actual_user_id:r.person_id||null,
+        state:'normal'
+      });
       if(ii.error)throw new Error(ii.error.message);
     }
     __setPeopleCache.clear();__setRowsCache=[];await cacheAllTables();
-    alert(`✅ № ${toAdd.map(x=>x.inventory_no).join(', ')} ავტომატურად დაფიქსირდა ${targetSet.set_no}-ის კომპლექტის წევრად.\n🟩 კომპლექტის ნიშანი დაედება დაკავშირებულ ინვენტარს.`);
+    alert(`✅ № ${toAdd.map(x=>x.inventory_no).join(', ')} დაემატა ${targetSet.set_no}-ის კომპლექტს.\n🟩 კომპლექტის ნიშანი დაედება დაკავშირებულ ინვენტარს.\n\nთითოეული ნომრის ფაქტობრივი მომხმარებელი უცვლელი დარჩა.`);
     closeModal();await loadRecords();
   }catch(e){alert('❌ ინვენტარების დაკავშირება ვერ მოხერხდა: '+(e.message||e))}
 }
